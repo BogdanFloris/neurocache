@@ -12,7 +12,8 @@
       let pkgs = nixpkgs.legacyPackages.${system};
       in {
         devShells.default = pkgs.mkShell {
-          packages = [ pkgs.cargo pkgs.rustc pkgs.clippy pkgs.rustfmt ];
+          packages =
+            [ pkgs.cargo pkgs.rustc pkgs.clippy pkgs.rustfmt pkgs.gcc ];
         };
       });
 }
