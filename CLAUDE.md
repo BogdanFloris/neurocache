@@ -62,6 +62,7 @@ This hybrid approach gives us:
 - [x] 0-A Workspace scaffolding (`cargo new`, `zig init`)
 - [x] 0-B Add core Rust deps (`tokio`, `serde_json`, `tracing`)
 - [x] 0-C `neuroctl` initial CLI arguments parsing
+- [x] 0-D GitHub Actions CI (test, clippy, fmt check)
 
 ### Core Raft Implementation
 - [ ] 1 `types.rs` – `Term`, `Index`, `Role` enums
