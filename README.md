@@ -2,9 +2,9 @@
 
 # NeuroCache
 
-[![Rust Version](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org)
-[![Release](https://img.shields.io/badge/release-v0.1.0-blue.svg)](https://github.com/yourusername/neurocache/releases)
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/yourusername/neurocache/actions)
+<a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/1.75+-orange?style=flat&logo=rust&label=Rust&color=%23dea584"></a>
+<a href="https://github.com/BogdanFloris/neurocache/releases"><img src="https://img.shields.io/github/v/release/BogdanFloris/neurocache?link=https%3A%2F%2Fgithub.com%2FBogdanFloris%2Fneurocache%2Freleases"></a>
+<a href="https://github.com/BogdanFloris/neurocache/actions"><img src="https://img.shields.io/github/actions/workflow/status/BogdanFloris/neurocache/ci.yml?link=https%3A%2F%2Fgithub.com%2FBogdanFloris%2Fneurocache%2Factions"></a>
 
 **A self-hosted CDN and predictive cache built from scratch.**
 
