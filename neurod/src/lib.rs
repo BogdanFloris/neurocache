@@ -26,7 +26,7 @@ pub enum KvResponse {
     InvalidKey,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct KvStore {
     store: HashMap<String, String>,
 }
