@@ -11,7 +11,7 @@ pub type Term = usize;
 pub type Index = usize;
 
 pub struct Entry<C> {
-    pub command: C
+    pub command: C,
 }
 
 pub struct Log<C> {
