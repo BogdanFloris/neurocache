@@ -1,6 +1,14 @@
+<div align="center">
+
 # NeuroCache
 
-A self-hosted CDN and predictive cache built from scratch.
+[![Rust Version](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org)
+[![Release](https://img.shields.io/badge/release-v0.1.0-blue.svg)](https://github.com/yourusername/neurocache/releases)
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/yourusername/neurocache/actions)
+
+**A self-hosted CDN and predictive cache built from scratch.**
+
+</div>
 
 ## Architecture
 
