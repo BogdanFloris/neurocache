@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum Rpc {
+pub enum Command {
     Get { key: String },
     Put { key: String, value: String },
     Del { key: String },
@@ -22,8 +22,8 @@ mod tests {
 
         }"#;
 
-        let m: Rpc = serde_json::from_str(data).unwrap();
-        assert!(matches!(m, Rpc::Get { .. }));
+        let m: Command = serde_json::from_str(data).unwrap();
+        assert!(matches!(m, Command::Get { .. }));
 
         let data = r#"
         {
@@ -34,8 +34,8 @@ mod tests {
 
         }"#;
 
-        let m: Rpc = serde_json::from_str(data).unwrap();
-        assert!(matches!(m, Rpc::Put { .. }));
+        let m: Command = serde_json::from_str(data).unwrap();
+        assert!(matches!(m, Command::Put { .. }));
 
         let data = r#"
         {
@@ -45,26 +45,26 @@ mod tests {
 
         }"#;
 
-        let m: Rpc = serde_json::from_str(data).unwrap();
-        assert!(matches!(m, Rpc::Del { .. }));
+        let m: Command = serde_json::from_str(data).unwrap();
+        assert!(matches!(m, Command::Del { .. }));
     }
 
     #[test]
     fn deserialize() {
-        let m = Rpc::Get {
+        let m = Command::Get {
             key: String::from("foo"),
         };
         let json = serde_json::to_string(&m).unwrap();
         assert_eq!(json, r#"{"get":{"key":"foo"}}"#);
 
-        let m = Rpc::Put {
+        let m = Command::Put {
             key: String::from("foo"),
             value: String::from("bar"),
         };
         let json = serde_json::to_string(&m).unwrap();
         assert_eq!(json, r#"{"put":{"key":"foo","value":"bar"}}"#);
 
-        let m = Rpc::Del {
+        let m = Command::Del {
             key: String::from("foo"),
         };
         let json = serde_json::to_string(&m).unwrap();
