@@ -2,7 +2,7 @@ use raft::StateMachine;
 
 use std::{
     str::{from_utf8, Utf8Error},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, PoisonError},
 };
 
 use clap::{command, Parser};
@@ -50,7 +50,7 @@ async fn handle_conn(mut stream: TcpStream, store: Arc<Mutex<KvStore>>) -> Resul
 
     let cmd: KvCommand = serde_json::from_str(request)?;
     let response = {
-        let mut store = store.lock().map_err(|_| ServerError::Unknown)?;
+        let mut store = store.lock().unwrap_or_else(PoisonError::into_inner);
         store.apply(cmd)
     };
     let response_json = serde_json::to_vec(&response)?;

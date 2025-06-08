@@ -53,9 +53,10 @@ impl StateMachine for KvStore {
 
     fn apply(&mut self, command: Self::Command) -> Self::Response {
         match command {
-            KvCommand::Get { key } => self.store.get(&key)
-                .map(|v| KvResponse::ok(Some(v.clone())))
-                .unwrap_or(KvResponse::NotFound),
+            KvCommand::Get { key } => self
+                .store
+                .get(&key)
+                .map_or(KvResponse::NotFound, |v| KvResponse::ok(Some(v.clone()))),
             KvCommand::Put { key, value } => {
                 if key.is_empty() || key.len() > 256 {
                     return KvResponse::InvalidKey;
@@ -63,9 +64,10 @@ impl StateMachine for KvStore {
                 self.store.insert(key, value);
                 KvResponse::ok(None)
             }
-            KvCommand::Del { key } => self.store.remove(&key)
-                .map(|v| KvResponse::ok(Some(v)))
-                .unwrap_or(KvResponse::NotFound),
+            KvCommand::Del { key } => self
+                .store
+                .remove(&key)
+                .map_or(KvResponse::NotFound, |v| KvResponse::ok(Some(v))),
         }
     }
 }
