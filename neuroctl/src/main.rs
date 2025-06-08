@@ -1,6 +1,7 @@
 use std::{
     io::{self, Read, Write},
     net::TcpStream,
+    time::Duration,
 };
 
 use clap::{Parser, ValueEnum};
@@ -67,6 +68,8 @@ fn main() -> Result<(), CliError> {
     }
 
     let mut stream = TcpStream::connect(&args.endpoints[0])?;
+    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
 
     let command = match args.command {
         Command::Get => KvCommand::Get { key: args.key },
