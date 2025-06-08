@@ -26,6 +26,13 @@ pub enum KvResponse {
     InvalidKey,
 }
 
+impl KvResponse {
+    #[must_use]
+    pub fn ok(value: Option<String>) -> Self {
+        Self::Ok { value }
+    }
+}
+
 #[derive(Default, Debug)]
 pub struct KvStore {
     store: HashMap<String, String>,
@@ -46,23 +53,19 @@ impl StateMachine for KvStore {
 
     fn apply(&mut self, command: Self::Command) -> Self::Response {
         match command {
-            KvCommand::Get { key } => match self.store.get(&key) {
-                Some(v) => KvResponse::Ok {
-                    value: Some(v.clone()),
-                },
-                None => KvResponse::NotFound,
-            },
+            KvCommand::Get { key } => self.store.get(&key)
+                .map(|v| KvResponse::ok(Some(v.clone())))
+                .unwrap_or(KvResponse::NotFound),
             KvCommand::Put { key, value } => {
-                if key.is_empty() {
+                if key.is_empty() || key.len() > 256 {
                     return KvResponse::InvalidKey;
                 }
                 self.store.insert(key, value);
-                KvResponse::Ok { value: None }
+                KvResponse::ok(None)
             }
-            KvCommand::Del { key } => match self.store.remove(&key) {
-                Some(v) => KvResponse::Ok { value: Some(v) },
-                None => KvResponse::NotFound,
-            },
+            KvCommand::Del { key } => self.store.remove(&key)
+                .map(|v| KvResponse::ok(Some(v)))
+                .unwrap_or(KvResponse::NotFound),
         }
     }
 }
