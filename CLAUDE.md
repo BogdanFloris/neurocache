@@ -63,9 +63,22 @@ This hybrid approach gives us:
 - [x] 0-B Add core Rust deps (`tokio`, `serde_json`, `tracing`)
 - [x] 0-C `neuroctl` initial CLI arguments parsing
 - [x] 0-D GitHub Actions CI (test, clippy, fmt check)
+- [x] 0-E Basic TCP server with length-prefixed JSON protocol
+- [x] 0-F Single-node KV store with HashMap backend
+- [x] 0-G `neuroctl get/put/del` commands (no Raft yet)
+
+### Testing Infrastructure (NEW - HIGH PRIORITY)
+- [ ] T-1 `TestCluster` harness for multi-node testing
+- [ ] T-2 `ChaosNetwork` for failure injection
+- [ ] T-3 Property-based tests for KV operations
+- [ ] T-4 Stress test: 100+ concurrent clients
+- [ ] T-5 Protocol fuzz testing (malformed messages)
+- [ ] T-6 Memory leak detection harness
+- [ ] T-7 Performance benchmarks (baseline: 100k ops/sec)
+- [ ] T-8 Integration test suite for client-server
 
 ### Core Raft Implementation
-- [ ] 1 `types.rs` – `Term`, `Index`, `Role` enums
+- [x] 1 `types.rs` – `Term`, `Index`, `Role` enums (partial)
 - [ ] 2 `log.rs` – `Vec<Entry>` + append/slice tests
 - [ ] 3 `state.rs` – term, voted_for, commit_idx
 - [ ] 4 Tick-based election FSM (single node)
@@ -79,7 +92,7 @@ This hybrid approach gives us:
 - [ ] 12 `nodes.yaml` config loader (id, host:port pairs)
 
 ### Basic KV Operations
-- [ ] 13 `neuroctl put/get/del` commands via Raft
+- [x] 13 `neuroctl put/get/del` commands via Raft (via TCP, no Raft consensus yet)
 - [ ] 14 `--json` flag for scripting output
 - [ ] 15 Leader redirect logic on `NotLeader` error
 
@@ -121,6 +134,53 @@ This hybrid approach gives us:
 - Logging: TRACE for IPC frames, DEBUG for elections, INFO for leadership changes.
 - Message framing: 4-byte big-endian length prefix before each JSON blob.
 
+## 3.1. Testing conventions (TigerStyle)
+
+### Core principles
+- **Assert early, assert often**: Every function should validate its inputs and state
+- **No production code without tests**: Test coverage is mandatory, not optional
+- **Fail fast**: Detect errors at the earliest possible point
+- **Deterministic tests**: No flaky tests allowed; use explicit timeouts and mocks
+- **Test the edges**: Focus on boundary conditions, error paths, and race conditions
+
+### Test categories
+
+#### Unit tests
+- Test individual functions/methods in isolation
+- Use property-based testing for invariants (proptest)
+- Mock external dependencies (time, network, filesystem)
+- Each test should complete in <100ms
+
+#### Integration tests
+- Test component interactions
+- Use real TCP connections but controlled environment
+- Test protocol compliance and error handling
+- Each test should complete in <1s
+
+#### Stress tests
+- Concurrent operations (100+ clients)
+- Memory pressure scenarios
+- Network failure injection
+- Long-running stability tests (hours)
+
+### Assertions strategy
+- **Preconditions**: `debug_assert!` for developer errors
+- **Postconditions**: Validate all return values
+- **Invariants**: Check data structure consistency after mutations
+- **State machines**: Assert valid state transitions only
+
+### Test utilities
+- `TestCluster`: Spawn N nodes with controlled network
+- `ChaosNetwork`: Inject delays, drops, partitions
+- `MemoryTracker`: Detect leaks and excessive allocations
+- `TimeController`: Deterministic time advancement
+
+### Performance assertions
+- Response time: 99p < 10ms for KV ops
+- Throughput: >100k ops/sec single node
+- Memory: <100MB base + 1KB per 1000 keys
+- Connections: Support 10k concurrent clients
+
 ## 4. Quick commands
 
 ```
@@ -144,10 +204,32 @@ cargo clippy --workspace -- -D warnings
 zig test zig/slab.zig
 ```
 
-## 5. Open questions
+## 5. Current Implementation Status
+
+### Completed
+- Single-node TCP server (neurod) with in-memory HashMap KV store
+- Length-prefixed JSON protocol (4-byte big-endian)
+- CLI client (neuroctl) with get/put/del commands
+- Basic error handling (NotFound, InvalidKey)
+- Timeout support in client (5s read/write)
+
+### In Progress
+- Adding TigerStyle assertions and test infrastructure
+- Stress testing framework for concurrent operations
+- Protocol robustness (malformed message handling)
+
+### Not Started
+- Actual Raft consensus implementation
+- Multi-node support
+- Persistence to disk
+- HTTP/3 edge server
+- Predictive caching
+
+## 6. Open questions
 
 - TLS handshake details
 - When to switch from TCP to QUIC
 - Snapshot compression (zstd or raw mmap?)
+- Should we add metrics collection before Raft implementation?
 
 Add new decisions or issues here as the project evolves.
