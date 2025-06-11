@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use raft::StateMachine;
 use serde::{Deserialize, Serialize};
 
+const MAX_KEY_LEN: usize = 256;
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum KvCommand {
@@ -58,7 +60,7 @@ impl StateMachine for KvStore {
                 .get(&key)
                 .map_or(KvResponse::NotFound, |v| KvResponse::ok(Some(v.clone()))),
             KvCommand::Put { key, value } => {
-                if key.is_empty() || key.len() > 256 {
+                if key.is_empty() || key.len() > MAX_KEY_LEN || !key.is_ascii() {
                     return KvResponse::InvalidKey;
                 }
                 self.store.insert(key, value);
