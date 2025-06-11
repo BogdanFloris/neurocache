@@ -8,8 +8,8 @@ use std::{
 use clap::{command, Parser};
 use neurod::{KvCommand, KvStore};
 use tokio::{
-    io::{self, AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream},
+    io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    net::TcpListener,
 };
 use tracing::{event, subscriber::SetGlobalDefaultError, Level};
 
@@ -36,7 +36,10 @@ struct Args {
     port: u16,
 }
 
-async fn handle_conn(mut stream: TcpStream, store: Arc<Mutex<KvStore>>) -> Result<(), ServerError> {
+async fn handle_conn<S>(mut stream: S, store: Arc<Mutex<KvStore>>) -> Result<(), ServerError>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     // Read length prefix (4 bytes big-endian)
     let mut len_buf = [0u8; 4];
     stream.read_exact(&mut len_buf).await?;
