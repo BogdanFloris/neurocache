@@ -12,8 +12,16 @@
       let pkgs = nixpkgs.legacyPackages.${system};
       in {
         devShells.default = pkgs.mkShell {
-          packages =
-            [ pkgs.cargo pkgs.rustc pkgs.clippy pkgs.rustfmt pkgs.gcc ];
+          packages = [
+            pkgs.cargo
+            pkgs.rustc
+            pkgs.clippy
+            pkgs.rustfmt
+            pkgs.gcc
+            pkgs.hyperfine
+            pkgs.cargo-flamegraph
+            pkgs.linuxKernel.packages.linux_latest_libre.perf
+          ];
         };
       });
 }
