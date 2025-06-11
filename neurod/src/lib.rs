@@ -75,7 +75,7 @@ impl StateMachine for KvStore {
 }
 
 #[cfg(test)]
-mod tests {
+mod serde_tests {
     use super::*;
 
     #[test]
@@ -175,5 +175,92 @@ mod tests {
                 members: vec!["127.0.0.1:7000".into(), "127.0.0.1:7001".into()]
             }
         );
+    }
+}
+
+#[cfg(test)]
+mod store_tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    fn valid_key_strategy() -> impl Strategy<Value = String> {
+        "[a-zA-Z0-9]{1,255}"
+    }
+
+    fn invalid_key_strategy() -> impl Strategy<Value = String> {
+        prop_oneof![
+            Just(String::new()),     // empty
+            "[a-zA-Z0-9]{257,1000}", // over max len
+            ".*[^\x00-\x7F]+.*",     // non-ascii
+        ]
+    }
+
+    fn value_strategy() -> impl Strategy<Value = String> {
+        prop::string::string_regex(".{0,10000}").unwrap()
+    }
+
+    proptest! {
+        #[test]
+        fn test_put_get_invariant(key in valid_key_strategy(), value in value_strategy()) {
+            let mut store = KvStore::new();
+            let put_resp = store.apply(KvCommand::Put { key: key.clone(), value: value.clone() });
+            prop_assert_eq!(put_resp, KvResponse::ok(None));
+
+            let get_resp = store.apply(KvCommand::Get { key: key.clone() });
+            prop_assert_eq!(get_resp, KvResponse::ok(Some(value)));
+        }
+
+        #[test]
+        fn test_put_del_get_invariant(key in valid_key_strategy(), value in value_strategy()) {
+            let mut store = KvStore::new();
+
+            store.apply(KvCommand::Put { key: key.clone(), value });
+            let del_resp = store.apply(KvCommand::Del { key: key.clone() });
+            match del_resp {
+                KvResponse::Ok { value: Some(_) } => {},
+                _ => prop_assert!(false, "Delete should return Ok with value"),
+            }
+
+            let get_resp = store.apply(KvCommand::Get { key });
+            prop_assert_eq!(get_resp, KvResponse::NotFound);
+        }
+
+        #[test]
+        fn test_invalid_key_rejection(key in invalid_key_strategy(), value in value_strategy()) {
+            let mut store = KvStore::new();
+
+            let put_resp = store.apply(KvCommand::Put { key, value });
+            prop_assert_eq!(put_resp, KvResponse::InvalidKey);
+        }
+
+        #[test]
+        fn test_get_nonexistent_key(key in valid_key_strategy()) {
+            let mut store = KvStore::new();
+
+            let get_resp = store.apply(KvCommand::Get { key });
+            prop_assert_eq!(get_resp, KvResponse::NotFound);
+        }
+
+        #[test]
+        fn test_del_nonexistent_key(key in valid_key_strategy()) {
+            let mut store = KvStore::new();
+
+            let del_resp = store.apply(KvCommand::Del { key });
+            prop_assert_eq!(del_resp, KvResponse::NotFound);
+        }
+
+        #[test]
+        fn test_same_key_put(key in valid_key_strategy(), values in prop::collection::vec(value_strategy(), 2)) {
+            let mut store = KvStore::new();
+
+            for value in &values {
+                let put_resp = store.apply(KvCommand::Put { key: key.clone(), value: value.clone() });
+                prop_assert_eq!(put_resp, KvResponse::ok(None));
+            }
+
+            // Should have the last value
+            let get_resp = store.apply(KvCommand::Get { key });
+            prop_assert_eq!(get_resp, KvResponse::ok(Some(values.last().unwrap().clone())));
+        }
     }
 }
