@@ -101,3 +101,48 @@ async fn main() -> Result<(), ServerError> {
         });
     }
 }
+
+#[cfg(test)]
+mod handle_conn {
+    use super::*;
+    use neurod::KvResponse;
+    use tokio::io::duplex;
+
+    async fn send<S>(c: &mut S, cmd: &KvCommand) -> KvResponse
+    where
+        S: AsyncRead + AsyncWrite + Unpin,
+    {
+        let msg = serde_json::to_vec(cmd).unwrap();
+        let len: u32 = msg.len().try_into().unwrap();
+        c.write_all(&len.to_be_bytes()).await.unwrap();
+        c.write_all(&msg).await.unwrap();
+
+        let mut len = [0u8; 4];
+        c.read_exact(&mut len).await.unwrap();
+        let mut msg_buf = vec![0; u32::from_be_bytes(len) as usize];
+        c.read_exact(&mut msg_buf).await.unwrap();
+
+        serde_json::from_slice(&msg_buf).unwrap()
+    }
+
+    #[tokio::test]
+    async fn roundtrip_put_get() {
+        let (mut client, server) = duplex(1024);
+        let store = Arc::new(Mutex::new(KvStore::new()));
+
+        tokio::spawn(handle_conn(server, store));
+
+        let put = KvCommand::Put {
+            key: "k".into(),
+            value: "v".into(),
+        };
+        assert_eq!(send(&mut client, &put).await, KvResponse::Ok { value: None });
+        let get = KvCommand::Get { key: "k".into() };
+        assert_eq!(
+            send(&mut client, &get).await,
+            KvResponse::Ok {
+                value: Some("v".into()),
+            }
+        );
+    }
+}
