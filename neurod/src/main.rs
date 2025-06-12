@@ -40,33 +40,40 @@ async fn handle_conn<S>(mut stream: S, store: Arc<Mutex<KvStore>>) -> Result<(),
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    // Read length prefix (4 bytes big-endian)
-    let mut len_buf = [0u8; 4];
-    stream.read_exact(&mut len_buf).await?;
-    let len = u32::from_be_bytes(len_buf) as usize;
+    loop {
+        let mut len_buf = [0u8; 4];
+        match stream.read_exact(&mut len_buf).await {
+            Ok(_) => {}
+            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+                // Client closed connection gracefully
+                event!(Level::DEBUG, "client closed connection");
+                return Ok(());
+            }
+            Err(e) => return Err(e.into()),
+        }
+        let len = u32::from_be_bytes(len_buf) as usize;
 
-    // Read message
-    let mut msg_buf = vec![0u8; len];
-    stream.read_exact(&mut msg_buf).await?;
-    let request = from_utf8(&msg_buf)?;
-    event!(Level::INFO, "received request: {request}");
+        // Read message
+        let mut msg_buf = vec![0u8; len];
+        stream.read_exact(&mut msg_buf).await?;
+        let request = from_utf8(&msg_buf)?;
+        event!(Level::INFO, "received request: {request}");
 
-    let cmd: KvCommand = serde_json::from_str(request)?;
-    let response = {
-        let mut store = store.lock().unwrap_or_else(PoisonError::into_inner);
-        store.apply(cmd)
-    };
-    let response_json = serde_json::to_vec(&response)?;
+        let cmd: KvCommand = serde_json::from_str(request)?;
+        let response = {
+            let mut store = store.lock().unwrap_or_else(PoisonError::into_inner);
+            store.apply(cmd)
+        };
+        let response_json = serde_json::to_vec(&response)?;
 
-    // Write length prefix and response
-    let len: u32 = response_json
-        .len()
-        .try_into()
-        .map_err(|_| ServerError::Unknown)?;
-    stream.write_all(&len.to_be_bytes()).await?;
-    stream.write_all(&response_json).await?;
-    stream.flush().await?;
-    Ok(())
+        let len: u32 = response_json
+            .len()
+            .try_into()
+            .map_err(|_| ServerError::Unknown)?;
+        stream.write_all(&len.to_be_bytes()).await?;
+        stream.write_all(&response_json).await?;
+        stream.flush().await?;
+    }
 }
 
 #[tokio::main]
