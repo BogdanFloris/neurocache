@@ -148,4 +148,74 @@ mod handle_conn {
             }
         );
     }
+
+    #[tokio::test]
+    async fn client_disconnect_graceful() {
+        let (client, server) = duplex(1024);
+        let store = Arc::new(Mutex::new(KvStore::new()));
+
+        let handle = tokio::spawn(handle_conn(server, store));
+        drop(client);
+        assert!(handle.await.unwrap().is_ok());
+    }
+
+    #[tokio::test]
+    async fn partial_message_then_disconnect() {
+        let (mut client, server) = duplex(1024);
+        let store = Arc::new(Mutex::new(KvStore::new()));
+
+        let handle = tokio::spawn(handle_conn(server, store));
+
+        client.write_all(&[0, 0]).await.unwrap();
+        drop(client);
+
+        assert!(handle.await.unwrap().is_ok());
+    }
+
+    #[tokio::test]
+    async fn invalid_message_length() {
+        let (mut client, server) = duplex(1024);
+        let store = Arc::new(Mutex::new(KvStore::new()));
+
+        let handle = tokio::spawn(handle_conn(server, store));
+
+        let len: u32 = 100;
+        client.write_all(&len.to_be_bytes()).await.unwrap();
+        client.write_all(b"short").await.unwrap();
+        drop(client);
+
+        assert!(handle.await.unwrap().is_err());
+    }
+
+    #[tokio::test]
+    async fn malformed_json_closes_connection() {
+        let (mut client, server) = duplex(1024);
+        let store = Arc::new(Mutex::new(KvStore::new()));
+
+        let handle = tokio::spawn(handle_conn(server, store));
+
+        let bad_json = b"{invalid json}";
+        let len: u32 = bad_json.len().try_into().unwrap();
+        client.write_all(&len.to_be_bytes()).await.unwrap();
+        client.write_all(bad_json).await.unwrap();
+
+        let mut buf = [0u8; 1];
+        assert_eq!(client.read(&mut buf).await.unwrap(), 0);
+
+        assert!(handle.await.unwrap().is_err());
+    }
+
+    #[tokio::test]
+    async fn zero_length_message() {
+        let (mut client, server) = duplex(1024);
+        let store = Arc::new(Mutex::new(KvStore::new()));
+
+        let handle = tokio::spawn(handle_conn(server, store));
+
+        let len: u32 = 0;
+        client.write_all(&len.to_be_bytes()).await.unwrap();
+
+        drop(client);
+        assert!(handle.await.unwrap().is_err());
+    }
 }
