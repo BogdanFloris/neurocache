@@ -136,7 +136,10 @@ mod handle_conn {
             key: "k".into(),
             value: "v".into(),
         };
-        assert_eq!(send(&mut client, &put).await, KvResponse::Ok { value: None });
+        assert_eq!(
+            send(&mut client, &put).await,
+            KvResponse::Ok { value: None }
+        );
         let get = KvCommand::Get { key: "k".into() };
         assert_eq!(
             send(&mut client, &get).await,
