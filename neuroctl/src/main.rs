@@ -140,7 +140,7 @@ mod tests {
 
     proptest! {
         #[test]
-        fn roundtrip_write_read_message(data: Vec<u8>) {
+        fn roundtrip_write_read_message(data in prop::collection::vec(any::<u8>(), 0..512)) {
             let mut buf = Vec::new();
             write_message(&mut buf, &data).unwrap();
 
