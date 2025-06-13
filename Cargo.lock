@@ -291,6 +291,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "neurod",
+ "proptest",
  "serde",
  "serde_json",
  "thiserror",

@@ -131,3 +131,30 @@ fn main() -> Result<(), CliError> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+    use std::io::Cursor;
+
+    proptest! {
+        #[test]
+        fn roundtrip_write_read_message(data: Vec<u8>) {
+            let mut buf = Vec::new();
+            write_message(&mut buf, &data).unwrap();
+
+            let mut cursor = Cursor::new(buf);
+            let read_data = read_message(&mut cursor).unwrap();
+
+            prop_assert_eq!(data, read_data);
+        }
+    }
+
+    #[test]
+    fn partial_message_read_fails() {
+        let data = vec![0, 0]; // Only 2 bytes of length prefix
+        let mut cursor = Cursor::new(data);
+        assert!(read_message(&mut cursor).is_err());
+    }
+}
