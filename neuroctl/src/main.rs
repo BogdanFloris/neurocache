@@ -39,7 +39,10 @@ struct Args {
     value: Option<String>,
 }
 
-fn write_message(stream: &mut TcpStream, msg: &[u8]) -> io::Result<()> {
+fn write_message<S>(stream: &mut S, msg: &[u8]) -> io::Result<()>
+where
+    S: Write,
+{
     let len: u32 = msg
         .len()
         .try_into()
@@ -50,7 +53,10 @@ fn write_message(stream: &mut TcpStream, msg: &[u8]) -> io::Result<()> {
     Ok(())
 }
 
-fn read_message(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
+fn read_message<S>(stream: &mut S) -> io::Result<Vec<u8>>
+where
+    S: Read,
+{
     let mut len_buf = [0u8; 4];
     stream.read_exact(&mut len_buf)?;
     let len = u32::from_be_bytes(len_buf) as usize;
@@ -60,29 +66,24 @@ fn read_message(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
     Ok(msg_buf)
 }
 
-fn main() -> Result<(), CliError> {
-    let args = Args::parse();
-
-    if args.endpoints.is_empty() {
-        return Err(CliError::NoEndpoints);
-    }
-
-    let mut stream = TcpStream::connect(&args.endpoints[0])?;
-    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
-
-    let command = match args.command {
-        Command::Get => KvCommand::Get { key: args.key },
+fn get_command(args: Args) -> Result<KvCommand, CliError> {
+    match args.command {
+        Command::Get => Ok(KvCommand::Get { key: args.key }),
         Command::Put => {
             let value = args.value.ok_or(CliError::ValueRequired)?;
-            KvCommand::Put {
+            Ok(KvCommand::Put {
                 key: args.key,
                 value,
-            }
+            })
         }
-        Command::Del => KvCommand::Del { key: args.key },
-    };
+        Command::Del => Ok(KvCommand::Del { key: args.key }),
+    }
+}
 
+fn handle_command<S>(mut stream: S, command: &KvCommand) -> Result<(), CliError>
+where
+    S: Read + Write,
+{
     let command_json = serde_json::to_vec(&command)?;
     write_message(&mut stream, &command_json)?;
     let response_bytes = read_message(&mut stream)?;
@@ -111,6 +112,22 @@ fn main() -> Result<(), CliError> {
             std::process::exit(1);
         }
     }
+    Ok(())
+}
+
+fn main() -> Result<(), CliError> {
+    let args = Args::parse();
+
+    if args.endpoints.is_empty() {
+        return Err(CliError::NoEndpoints);
+    }
+
+    let stream = TcpStream::connect(&args.endpoints[0])?;
+    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+
+    let command = get_command(args)?;
+    handle_command(stream, &command)?;
 
     Ok(())
 }
