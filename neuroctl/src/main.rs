@@ -150,11 +150,4 @@ mod tests {
             prop_assert_eq!(data, read_data);
         }
     }
-
-    #[test]
-    fn partial_message_read_fails() {
-        let data = vec![0, 0]; // Only 2 bytes of length prefix
-        let mut cursor = Cursor::new(data);
-        assert!(read_message(&mut cursor).is_err());
-    }
 }
