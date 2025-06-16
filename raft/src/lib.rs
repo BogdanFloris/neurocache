@@ -1,35 +1,21 @@
-use std::num::TryFromIntError;
-
+use log::{Log, LogError};
 use serde::{de::DeserializeOwned, Serialize};
+
+pub mod log;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RaftNodeError {
-    #[error("")]
-    CastError(#[from] TryFromIntError),
+    #[error("log operation failed")]
+    LogError(#[from] LogError)
 }
 
 pub trait StateMachine {
-    type Command: Serialize + DeserializeOwned + Clone;
+    type Command: Serialize + DeserializeOwned + Clone + PartialEq;
     type Response: Serialize + DeserializeOwned;
 
     fn apply(&mut self, command: Self::Command) -> Self::Response;
 }
 
-pub type Term = u64;
-pub type Index = u64;
-
-#[derive(Debug)]
-pub struct Entry<C> {
-    pub command: C,
-    pub term: Term,
-}
-
-#[derive(Default, Debug)]
-pub struct Log<C> {
-    pub entries: Vec<Entry<C>>,
-    pub committed: Index,
-    pub applied: Index,
-}
 
 #[derive(Default, Debug)]
 pub struct RaftNode<S: StateMachine> {
@@ -38,19 +24,19 @@ pub struct RaftNode<S: StateMachine> {
 }
 
 impl<S: StateMachine> RaftNode<S> {
-    /// Applies all committed but not yet applied entries to the state machine
-    ///
-    /// # Errors
-    ///
-    /// Returns `RaftNodeError::CastError` if the applied index cannot be converted
-    /// to `usize` for array indexing.
-    pub fn apply_committed_entries(&mut self) -> Result<(), RaftNodeError> {
-        while self.log.applied < self.log.committed {
-            let entry = &self.log.entries[usize::try_from(self.log.applied)?];
-            self.state_machine.apply(entry.command.clone());
-            self.log.applied += 1;
-        }
-
-        Ok(())
-    }
+    // /// Applies all committed but not yet applied entries to the state machine
+    // ///
+    // /// # Errors
+    // ///
+    // /// Returns `RaftNodeError::CastError` if `at` fails
+    // pub fn apply_committed_entries(&mut self) -> Result<(), RaftNodeError> {
+    //     while self.log.applied < self.log.committed {
+    //         let entry = &self.log.at(self.log.applied)?;
+    //         self.state_machine.apply(entry.command.clone());
+    //         self.log.applied += 1;
+    //         // TODO: notify that we have applied the index
+    //     }
+    //
+    //     Ok(())
+    // }
 }
