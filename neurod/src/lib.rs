@@ -250,7 +250,7 @@ mod store_tests {
         }
 
         #[test]
-        fn test_same_key_put(key in valid_key_strategy(), values in prop::collection::vec(value_strategy(), 2)) {
+        fn test_two_puts_same_key(key in valid_key_strategy(), values in prop::collection::vec(value_strategy(), 2)) {
             let mut store = KvStore::new();
 
             for value in &values {
