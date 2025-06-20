@@ -1,7 +1,7 @@
 use std::num::TryFromIntError;
 
-pub type Index = i64;
-pub type Term = i64;
+pub type Index = u64;
+pub type Term = u64;
 
 #[derive(Debug, thiserror::Error)]
 pub enum LogError {
@@ -11,7 +11,13 @@ pub enum LogError {
     IndexOutOfBounds(Index),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AppendOutcome {
+    Success,  // entries appended
+    Conflict, // prev_log_index/term mismatch
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct Entry<C> {
     pub command: C,
     pub term: Term,
@@ -26,7 +32,7 @@ impl<C: Default> Default for Log<C> {
     fn default() -> Self {
         let sentinel = Entry {
             command: C::default(),
-            term: -1,
+            term: 0,
         };
         Self {
             entries: vec![sentinel],
@@ -53,34 +59,26 @@ impl<C> Log<C>
 where
     C: PartialEq,
 {
-    /// Append all supplied entries to the log, checks consistency, and implements conflict
-    /// resolution.
+    /// Appends entries to the log following the Raft consistency protocol.
     ///
-    /// Consistency is checked by verifying the following:
-    ///  * `prev_log_index` should exist in the log
-    ///  * checks if the term of the entry at `prev_log_index` matches the supplied `prev_log_term`
-    ///
-    ///  We return `Ok(false)` if either check fails.
-    ///
-    /// Conflic resolution is implemented by comparing supplied `entries`
-    /// with entries already in the log starting from `prev_log_index + 1`.
-    /// If entries do not match, we truncate the log at that point.
+    /// Verified log consistency at `prev_log_index` with `prev_log_term`, then:
+    ///  - Removes any conflicting entries starting from the first mismatch
+    ///  - Appends new entries not already present in the log
     ///
     /// # Errors
     ///
-    /// Returns `RaftNodeError::CastError` if `at` fails
+    /// Returns `RaftNodeError::CastError` if `at` or `try_from` integer casting fails
     pub fn append_entries(
         &mut self,
         prev_log_index: Index,
         prev_log_term: Term,
         mut entries: Vec<Entry<C>>,
-    ) -> Result<bool, LogError> {
-        let n = i64::try_from(self.entries.len())?;
-        if prev_log_index >= n {
-            return Ok(false);
+    ) -> Result<AppendOutcome, LogError> {
+        if prev_log_index >= self.entries.len() as Index {
+            return Ok(AppendOutcome::Conflict);
         }
         if self.at(prev_log_index)?.term != prev_log_term {
-            return Ok(false);
+            return Ok(AppendOutcome::Conflict);
         }
         let mut i = 0;
         let mut j = usize::try_from(prev_log_index)? + 1;
@@ -94,6 +92,125 @@ where
         }
 
         self.entries.append(&mut entries.split_off(i));
-        Ok(true)
+        Ok(AppendOutcome::Success)
+    }
+}
+
+#[cfg(test)]
+mod log_tests {
+    use super::*;
+
+    #[test]
+    fn test_default_log_has_sentinel() {
+        let log = Log::<u32>::default();
+        assert_eq!(log.entries.len(), 1);
+        assert_eq!(log.entries[0].term, 0);
+        assert_eq!(log.entries[0].command, 0);
+    }
+
+    #[test]
+    fn test_at_valid_index() {
+        let log = Log::<u32>::default();
+        let entry = log.at(0).unwrap();
+        assert_eq!(entry.term, 0);
+        assert_eq!(entry.command, 0);
+    }
+
+    #[test]
+    fn test_at_index_out_of_bounds() {
+        let log = Log::<u32>::default();
+        let result = log.at(1);
+        assert!(matches!(result, Err(LogError::IndexOutOfBounds(1))));
+    }
+
+    #[test]
+    fn test_append_entries_to_empty_log() {
+        let mut log = Log::<u32>::default();
+        let entries = vec![
+            Entry {
+                command: 1,
+                term: 1,
+            },
+            Entry {
+                command: 2,
+                term: 1,
+            },
+        ];
+
+        let result = log.append_entries(0, 0, entries).unwrap();
+        assert_eq!(result, AppendOutcome::Success);
+        assert_eq!(log.entries.len(), 3);
+        assert_eq!(log.at(1).unwrap().command, 1);
+        assert_eq!(log.at(2).unwrap().command, 2);
+    }
+
+    #[test]
+    fn test_append_entries_idempotent() {
+        let mut log = Log::<u32>::default();
+        let entries = vec![
+            Entry {
+                command: 1,
+                term: 1,
+            },
+            Entry {
+                command: 2,
+                term: 1,
+            },
+        ];
+
+        log.append_entries(0, 0, entries.clone()).unwrap();
+        let result = log.append_entries(0, 0, entries).unwrap();
+        assert_eq!(result, AppendOutcome::Success);
+        assert_eq!(log.entries.len(), 3); // Should not duplicate
+    }
+
+    #[test]
+    fn test_append_entries_conflict_wrong_prev_index() {
+        let mut log = Log::<u32>::default();
+        let result = log.append_entries(5, 1, vec![]).unwrap();
+        assert_eq!(result, AppendOutcome::Conflict);
+    }
+
+    #[test]
+    fn test_append_entries_conflict_wrong_prev_term() {
+        let mut log = Log::<u32>::default();
+        log.entries.push(Entry {
+            command: 1,
+            term: 1,
+        });
+        let result = log.append_entries(1, 2, vec![]).unwrap();
+        assert_eq!(result, AppendOutcome::Conflict);
+    }
+
+    #[test]
+    fn test_append_truncates_conflicting_entries() {
+        let mut log = Log::<u32>::default();
+        log.entries.push(Entry {
+            command: 1,
+            term: 1,
+        });
+        log.entries.push(Entry {
+            command: 2,
+            term: 1,
+        });
+        log.entries.push(Entry {
+            command: 3,
+            term: 1,
+        });
+        let new_entries = [
+            Entry {
+                command: 2,
+                term: 3,
+            },
+            Entry {
+                command: 3,
+                term: 3,
+            },
+        ];
+        let result = log.append_entries(1, 1, new_entries.to_vec()).unwrap();
+        assert_eq!(result, AppendOutcome::Success);
+        assert_eq!(log.entries.len(), 4);
+        assert_eq!(log.at(2).unwrap().command, 2);
+        assert_eq!(log.at(2).unwrap().term, 3);
     }
 }
