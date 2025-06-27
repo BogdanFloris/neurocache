@@ -1,6 +1,6 @@
 use clap::{command, Parser};
-use neurod::NeuroError;
-use raft::Config;
+use neurod::{KvStore, NeuroError};
+use raft::{Config, RaftNode};
 use tracing::info;
 
 #[derive(Parser)]
@@ -21,7 +21,12 @@ async fn main() -> Result<(), NeuroError> {
 
     let args = Args::parse();
     let config = Config::from_file(args.config_file.as_str())?;
-    info!("{config:?}");
+    let store = KvStore::new();
+    let node = RaftNode::new(&config, store);
+
+    node.listen().await?;
+    tokio::signal::ctrl_c().await?;
+    info!("shutting down...");
 
     Ok(())
 }
