@@ -1,7 +1,7 @@
 use clap::{command, Parser};
 use neurod::{KvStore, NeuroError};
 use raft::{Config, RaftNode};
-use tracing::info;
+use tracing::{error, info};
 
 #[derive(Parser)]
 #[command(version, about)]
@@ -25,8 +25,16 @@ async fn main() -> Result<(), NeuroError> {
     let node = RaftNode::new(&config, store);
 
     node.listen().await?;
+
+    let node_handle = tokio::spawn(async move {
+        if let Err(e) = node.run().await {
+            error!("node run error: {}", e);
+        }
+    });
+
     tokio::signal::ctrl_c().await?;
     info!("shutting down...");
+    node_handle.abort();
 
     Ok(())
 }
