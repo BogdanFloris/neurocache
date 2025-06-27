@@ -37,10 +37,6 @@ pub enum KvResponse {
         value: Option<String>,
     },
     NotFound,
-    NotLeader {
-        leader_addr: String,
-        members: Vec<String>,
-    },
     InvalidKey,
 }
 
@@ -155,14 +151,6 @@ mod serde_tests {
             serde_json::to_string(&KvResponse::InvalidKey).unwrap(),
             r#"{"status":"invalid-key"}"#
         );
-        assert_eq!(
-            serde_json::to_string(&KvResponse::NotLeader {
-                leader_addr: "127.0.0.1:7000".into(),
-                members: vec!["127.0.0.1:7000".into(), "127.0.0.1:7001".into()]
-            })
-            .unwrap(),
-            r#"{"status":"not-leader","leader_addr":"127.0.0.1:7000","members":["127.0.0.1:7000","127.0.0.1:7001"]}"#
-        );
 
         // Deserialization
         assert_eq!(
@@ -182,15 +170,6 @@ mod serde_tests {
         assert_eq!(
             serde_json::from_str::<KvResponse>(r#"{"status":"invalid-key"}"#).unwrap(),
             KvResponse::InvalidKey
-        );
-        assert_eq!(
-            serde_json::from_str::<KvResponse>(
-                r#"{"status":"not-leader","leader_addr":"127.0.0.1:7000","members":["127.0.0.1:7000","127.0.0.1:7001"]}"#
-            ).unwrap(),
-            KvResponse::NotLeader {
-                leader_addr: "127.0.0.1:7000".into(),
-                members: vec!["127.0.0.1:7000".into(), "127.0.0.1:7001".into()]
-            }
         );
     }
 }

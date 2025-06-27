@@ -101,12 +101,6 @@ where
             eprintln!("Key not found");
             std::process::exit(1);
         }
-        KvResponse::NotLeader {
-            leader_addr: _,
-            members: _,
-        } => {
-            std::process::exit(1);
-        }
         KvResponse::InvalidKey => {
             eprintln!("Invalid key");
             std::process::exit(1);
