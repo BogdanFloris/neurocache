@@ -13,6 +13,7 @@ pub use log::{Entry, Log, LogError};
 pub use message::{Message, RaftResponse};
 pub use network::PeerNetwork;
 pub use node::RaftNode;
+use tokio::sync::oneshot::error::RecvError;
 
 pub type NodeId = u8;
 pub type Index = u64;
@@ -29,6 +30,8 @@ pub enum RaftError {
     Io(#[from] io::Error),
     #[error("rpc error: {0}")]
     Rpc(#[from] serde_json::Error),
+    #[error("recv error: {0}")]
+    RecvError(#[from] RecvError),
     #[error("disconnected")]
     Disconnected,
 }
