@@ -2,8 +2,7 @@ use std::num::TryFromIntError;
 
 use serde::{Deserialize, Serialize};
 
-pub type Index = u64;
-pub type Term = u64;
+use crate::{Index, Term};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LogError {

@@ -12,6 +12,9 @@ pub use message::Message;
 pub use network::PeerNetwork;
 pub use node::RaftNode;
 
+pub type NodeId = u8;
+pub type Index = u64;
+pub type Term = u64;
 #[derive(Debug, thiserror::Error)]
 pub enum RaftError {
     #[error("log operation failed")]
