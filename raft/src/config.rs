@@ -2,7 +2,7 @@ use std::{error::Error, net::SocketAddr};
 
 use serde::{Deserialize, Serialize};
 
-pub type NodeId = u8;
+use crate::NodeId;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Peer {
