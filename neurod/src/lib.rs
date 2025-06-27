@@ -1,6 +1,6 @@
-use std::{collections::HashMap, error::Error};
+use std::{collections::HashMap, error::Error, io};
 
-use raft::StateMachine;
+use raft::{RaftError, StateMachine};
 use serde::{Deserialize, Serialize};
 use tracing::subscriber::SetGlobalDefaultError;
 
@@ -10,6 +10,10 @@ pub enum NeuroError {
     Tracing(#[from] SetGlobalDefaultError),
     #[error("config: {0}")]
     Config(#[from] Box<dyn Error>),
+    #[error("io error: {0}")]
+    Io(#[from] io::Error),
+    #[error("raft: {0}")]
+    Raft(#[from] RaftError),
 }
 
 const MAX_KEY_LEN: usize = 256;
