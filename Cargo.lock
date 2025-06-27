@@ -292,6 +292,7 @@ dependencies = [
  "clap",
  "neurod",
  "proptest",
+ "raft",
  "serde",
  "serde_json",
  "thiserror",

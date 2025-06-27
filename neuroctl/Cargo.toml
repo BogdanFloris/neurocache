@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 clap = { workspace = true }
+raft = { path = "../raft" }
 neurod = { path = "../neurod" }
 serde = { workspace = true }
 serde_json = { workspace = true }

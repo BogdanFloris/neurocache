@@ -1,6 +1,6 @@
 use std::{collections::HashMap, error::Error, io};
 
-use raft::{RaftError, StateMachine};
+use raft::{Message, RaftError, StateMachine};
 use serde::{Deserialize, Serialize};
 use tracing::subscriber::SetGlobalDefaultError;
 

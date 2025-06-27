@@ -5,7 +5,8 @@ use std::{
 };
 
 use clap::{Parser, ValueEnum};
-use neurod::{KvCommand, KvResponse};
+use neurod::{KvCommand, KvResponse, KvStore};
+use raft::{Message, RaftResponse};
 use serde::Serialize;
 
 #[derive(Debug, thiserror::Error)]
@@ -80,32 +81,48 @@ fn get_command(args: Args) -> Result<KvCommand, CliError> {
     }
 }
 
-fn handle_command<S>(mut stream: S, command: &KvCommand) -> Result<(), CliError>
+fn handle_command<S>(mut stream: S, command: KvCommand) -> Result<(), CliError>
 where
     S: Read + Write,
 {
-    let command_json = serde_json::to_vec(&command)?;
-    write_message(&mut stream, &command_json)?;
+    let message = Message::<KvStore>::ClientCommand { command };
+    let message_json = serde_json::to_vec(&message)?;
+    write_message(&mut stream, &message_json)?;
     let response_bytes = read_message(&mut stream)?;
-    let response: KvResponse = serde_json::from_slice(&response_bytes)?;
+    let response_message: Message<KvStore> = serde_json::from_slice(&response_bytes)?;
 
-    match response {
-        KvResponse::Ok { value } => {
-            if let Some(v) = value {
-                println!("{v}");
-            } else {
-                println!("OK");
+    if let Message::ClientResponse { response } = response_message {
+        match response {
+            RaftResponse::Ok(kv_response) => match kv_response {
+                KvResponse::Ok { value } => {
+                    if let Some(v) = value {
+                        println!("{v}");
+                    } else {
+                        println!("ok");
+                    }
+                }
+                KvResponse::NotFound => {
+                    eprintln!("key not found");
+                    std::process::exit(1);
+                }
+                KvResponse::InvalidKey => {
+                    eprintln!("invalid key");
+                    std::process::exit(1);
+                }
+            },
+            RaftResponse::NotLeader {
+                leader_id,
+                leader_addr,
+            } => {
+                eprintln!("not leader. leader is node {leader_id} at {leader_addr}");
+                std::process::exit(1);
             }
         }
-        KvResponse::NotFound => {
-            eprintln!("Key not found");
-            std::process::exit(1);
-        }
-        KvResponse::InvalidKey => {
-            eprintln!("Invalid key");
-            std::process::exit(1);
-        }
+    } else {
+        println!("unexpected response type");
+        std::process::exit(1);
     }
+
     Ok(())
 }
 
@@ -121,7 +138,7 @@ fn main() -> Result<(), CliError> {
     stream.set_write_timeout(Some(Duration::from_secs(5)))?;
 
     let command = get_command(args)?;
-    handle_command(stream, &command)?;
+    handle_command(stream, command)?;
 
     Ok(())
 }
