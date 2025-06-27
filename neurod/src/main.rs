@@ -7,7 +7,7 @@ use tracing::info;
 #[command(version, about)]
 struct Args {
     #[arg(short, long)]
-    config_file: String
+    config_file: String,
 }
 
 #[tokio::main]

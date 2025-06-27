@@ -1,16 +1,16 @@
 use serde::{de::DeserializeOwned, Serialize};
 
+pub mod config;
 pub mod log;
 pub mod message;
-pub mod node;
 pub mod network;
-pub mod config;
+pub mod node;
 
-pub use log::{Log, LogError, Entry, Index, Term};
-pub use message::Message;
-pub use node::RaftNode;
-pub use network::PeerNetwork;
 pub use config::Config;
+pub use log::{Entry, Index, Log, LogError, Term};
+pub use message::Message;
+pub use network::PeerNetwork;
+pub use node::RaftNode;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RaftError {

@@ -19,7 +19,7 @@ pub enum AppendOutcome {
     Conflict, // prev_log_index/term mismatch
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize,Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Entry<C> {
     pub command: C,
     pub term: Term,

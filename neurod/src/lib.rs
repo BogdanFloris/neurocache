@@ -9,7 +9,7 @@ pub enum NeuroError {
     #[error("tracing: {0}")]
     Tracing(#[from] SetGlobalDefaultError),
     #[error("config: {0}")]
-    Config(#[from] Box<dyn Error>)
+    Config(#[from] Box<dyn Error>),
 }
 
 const MAX_KEY_LEN: usize = 256;
@@ -20,7 +20,7 @@ pub enum KvCommand {
     Get { key: String },
     Put { key: String, value: String },
     Del { key: String },
-    Noop
+    Noop,
 }
 
 impl Default for KvCommand {
