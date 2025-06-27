@@ -1,5 +1,7 @@
 use std::num::TryFromIntError;
 
+use serde::{Deserialize, Serialize};
+
 pub type Index = u64;
 pub type Term = u64;
 
@@ -17,7 +19,7 @@ pub enum AppendOutcome {
     Conflict, // prev_log_index/term mismatch
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize,Deserialize)]
 pub struct Entry<C> {
     pub command: C,
     pub term: Term,
