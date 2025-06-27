@@ -1,4 +1,4 @@
-use crate::{Config, Log, NodeId, PeerNetwork, RaftError, StateMachine};
+use crate::{Config, Log, Message, NodeId, PeerNetwork, RaftError, RaftResponse, StateMachine};
 
 pub struct RaftNode<S: StateMachine> {
     id: NodeId,
@@ -31,5 +31,36 @@ impl<S: StateMachine + 'static> RaftNode<S> {
     /// Returns `RaftError` if the peer networking infrastructure throws and eeror.
     pub async fn listen(&self) -> Result<(), RaftError> {
         self.peer_network.listen().await
+    }
+
+    /// Runs the loop that listens on the peer network `incoming_rx` for messages.
+    ///
+    /// # Errors
+    /// Returns a `RaftError` if `handle_msg` fails
+    pub async fn run(mut self) -> Result<(), RaftError> {
+        let (mut incoming_rx, mut client_rx) = self.peer_network.take_receivers();
+
+        loop {
+            tokio::select! {
+                // Node to node message
+                Some(..) = incoming_rx.recv() => {
+                    todo!();
+                }
+                Some((msg, resp_tx)) = client_rx.recv() => {
+                    if let Some(resp) = self.handle_client_msg(msg) {
+                        let _ = resp_tx.send(Message::ClientResponse {
+                            response: RaftResponse::Ok(resp),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    fn handle_client_msg(&mut self, msg: Message<S>) -> Option<S::Response> {
+        match msg {
+            Message::ClientCommand { command } => Some(self.state_machine.apply(command)),
+            _ => None,
+        }
     }
 }
