@@ -1,7 +1,16 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, error::Error};
 
 use raft::StateMachine;
 use serde::{Deserialize, Serialize};
+use tracing::subscriber::SetGlobalDefaultError;
+
+#[derive(Debug, thiserror::Error)]
+pub enum NeuroError {
+    #[error("tracing: {0}")]
+    Tracing(#[from] SetGlobalDefaultError),
+    #[error("config: {0}")]
+    Config(#[from] Box<dyn Error>)
+}
 
 const MAX_KEY_LEN: usize = 256;
 
@@ -11,6 +20,13 @@ pub enum KvCommand {
     Get { key: String },
     Put { key: String, value: String },
     Del { key: String },
+    Noop
+}
+
+impl Default for KvCommand {
+    fn default() -> Self {
+        Self::Noop
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -55,6 +71,7 @@ impl StateMachine for KvStore {
 
     fn apply(&mut self, command: Self::Command) -> Self::Response {
         match command {
+            KvCommand::Noop => KvResponse::ok(None),
             KvCommand::Get { key } => self
                 .store
                 .get(&key)
