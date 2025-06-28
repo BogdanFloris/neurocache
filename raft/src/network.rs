@@ -22,30 +22,30 @@ pub struct PeerNetwork<S: StateMachine> {
     listen_addr: SocketAddr,
     incoming_tx: mpsc::Sender<Message<S>>,
     incoming_rx: mpsc::Receiver<Message<S>>,
-    client_tx: ClientSender<S>,
-    client_rx: ClientReceiver<S>,
+    inc_client_tx: ClientSender<S>,
+    inc_client_rx: ClientReceiver<S>,
 }
 
 impl<S: StateMachine> PeerNetwork<S> {
     #[must_use]
     pub fn new(node_id: NodeId, listen_addr: SocketAddr) -> Self {
         let (incoming_tx, incoming_rx) = mpsc::channel(INC_CHANNEL_SIZE);
-        let (client_tx, client_rx) = mpsc::channel(INC_CHANNEL_SIZE);
+        let (inc_client_tx, inc_client_rx) = mpsc::channel(INC_CHANNEL_SIZE);
 
         Self {
             node_id,
             listen_addr,
             incoming_tx,
             incoming_rx,
-            client_tx,
-            client_rx,
+            inc_client_tx,
+            inc_client_rx,
         }
     }
 
     /// Take ownership of the receivers
     pub fn take_receivers(&mut self) -> (mpsc::Receiver<Message<S>>, ClientReceiver<S>) {
         let incoming_rx = std::mem::replace(&mut self.incoming_rx, mpsc::channel(1).1);
-        let client_rx = std::mem::replace(&mut self.client_rx, mpsc::channel(1).1);
+        let client_rx = std::mem::replace(&mut self.inc_client_rx, mpsc::channel(1).1);
         (incoming_rx, client_rx)
     }
 
@@ -62,7 +62,7 @@ impl<S: StateMachine> PeerNetwork<S> {
     {
         let listener = TcpListener::bind(self.listen_addr).await?;
         let incoming_tx = self.incoming_tx.clone();
-        let client_tx = self.client_tx.clone();
+        let inc_client_tx = self.inc_client_tx.clone();
 
         tokio::spawn(async move {
             loop {
@@ -70,7 +70,7 @@ impl<S: StateMachine> PeerNetwork<S> {
                     Ok((stream, peer_addr)) => {
                         info!("accepting connection from: {peer_addr}");
                         let incoming_tx = incoming_tx.clone();
-                        let client_tx = client_tx.clone();
+                        let client_tx = inc_client_tx.clone();
                         tokio::spawn(async move {
                             if let Err(e) = handle_inc_conn(stream, incoming_tx, client_tx).await {
                                 error!("error handling connection: {e}");
@@ -89,17 +89,16 @@ impl<S: StateMachine> PeerNetwork<S> {
 async fn handle_inc_conn<S: StateMachine>(
     mut stream: TcpStream,
     incoming_tx: mpsc::Sender<Message<S>>,
-    client_tx: ClientSender<S>,
+    inc_client_tx: ClientSender<S>,
 ) -> Result<(), RaftError> {
     let first_msg = recv_message(&mut stream).await?;
     if let Message::ClientCommand { .. } = first_msg {
         let (resp_tx, resp_rx) = oneshot::channel();
-        client_tx
+        inc_client_tx
             .send((first_msg, resp_tx))
             .await
             .map_err(|_| RaftError::Disconnected)?;
         let response = resp_rx.await?;
-        info!("received response");
         send_message(&mut stream, response).await?;
         Ok(())
     } else {

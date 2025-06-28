@@ -46,6 +46,7 @@ impl<S: StateMachine + 'static> RaftNode<S> {
                 Some(..) = incoming_rx.recv() => {
                     todo!();
                 }
+                // Client to node message
                 Some((msg, resp_tx)) = client_rx.recv() => {
                     if let Some(resp) = self.handle_client_msg(msg) {
                         let _ = resp_tx.send(Message::ClientResponse {
