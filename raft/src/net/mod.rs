@@ -98,7 +98,7 @@ async fn handle_inc_conn<S: StateMachine>(
             .await
             .map_err(|_| RaftError::Disconnected)?;
         let response = resp_rx.await?;
-        send_message(&mut stream, response).await?;
+        send_message(&mut stream, &response).await?;
         Ok(())
     } else {
         incoming_tx
@@ -118,7 +118,7 @@ async fn handle_inc_conn<S: StateMachine>(
 /// Send a Message<S> to the stream using length prefixed codec.
 async fn send_message<S: StateMachine>(
     stream: &mut TcpStream,
-    msg: Message<S>,
+    msg: &Message<S>,
 ) -> Result<(), RaftError> {
     let bytes = serde_json::to_vec(&msg)?;
     let len: u32 = bytes
