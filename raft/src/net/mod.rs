@@ -10,8 +10,6 @@ use tokio::{
 };
 use tracing::{error, info};
 
-pub mod pool;
-
 use crate::{Message, NodeId, RaftError, StateMachine, INC_CHANNEL_SIZE};
 
 type ClientRequest<S> = (Message<S>, oneshot::Sender<Message<S>>);
