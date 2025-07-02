@@ -10,9 +10,10 @@ use tokio::{
 };
 use tracing::{error, info};
 
+pub mod pool;
+
 use crate::{Message, NodeId, RaftError, StateMachine, INC_CHANNEL_SIZE};
 
-// Type aliases to reduce complexity
 type ClientRequest<S> = (Message<S>, oneshot::Sender<Message<S>>);
 type ClientReceiver<S> = mpsc::Receiver<ClientRequest<S>>;
 type ClientSender<S> = mpsc::Sender<ClientRequest<S>>;

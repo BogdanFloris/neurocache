@@ -5,13 +5,14 @@ use serde::{de::DeserializeOwned, Serialize};
 pub mod config;
 pub mod log;
 pub mod message;
-pub mod network;
+pub mod net;
 pub mod node;
 
 pub use config::Config;
 pub use log::{Entry, Log, LogError};
 pub use message::{Message, RaftResponse};
-pub use network::PeerNetwork;
+pub use net::PeerNetwork;
+pub use net::pool::ConnectionPool;
 pub use node::RaftNode;
 use tokio::sync::oneshot::error::RecvError;
 
