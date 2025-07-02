@@ -12,9 +12,9 @@ pub use config::Config;
 pub use log::{Entry, Log, LogError};
 pub use message::{Message, RaftResponse};
 pub use net::PeerNetwork;
-pub use net::pool::ConnectionPool;
 pub use node::RaftNode;
 use tokio::sync::oneshot::error::RecvError;
+use tokio::task::JoinError;
 
 pub type NodeId = u8;
 pub type Index = u64;
@@ -33,13 +33,17 @@ pub enum RaftError {
     Rpc(#[from] serde_json::Error),
     #[error("recv error: {0}")]
     RecvError(#[from] RecvError),
+    #[error("join error: {0}")]
+    JoinError(#[from] JoinError),
     #[error("disconnected")]
     Disconnected,
+    #[error("unknown peer: {0}")]
+    UnknownPeer(NodeId),
 }
 
 pub trait StateMachine {
-    type Command: Serialize + DeserializeOwned + Clone + PartialEq + Default + Send;
-    type Response: Serialize + DeserializeOwned + Send;
+    type Command: Serialize + DeserializeOwned + Clone + PartialEq + Default + Send + Sync;
+    type Response: Serialize + DeserializeOwned + Clone + PartialEq + Send + Sync;
 
     fn apply(&mut self, command: Self::Command) -> Self::Response;
 }
