@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Entry, Index, NodeId, StateMachine, Term};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum RaftResponse<R> {
     Ok(R),
     NotLeader {
@@ -13,7 +13,7 @@ pub enum RaftResponse<R> {
     },
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type")]
 pub enum Message<S: StateMachine> {
     AppendEntries {

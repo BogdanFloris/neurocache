@@ -33,7 +33,7 @@ impl Default for KvCommand {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case", tag = "status")]
 pub enum KvResponse {
     Ok {
