@@ -59,6 +59,7 @@ impl<S: StateMachine> PeerNetwork<S> {
     where
         S: 'static,
     {
+        info!("peer network listening for node {}...", self.node_id);
         let listener = TcpListener::bind(self.listen_addr).await?;
         let incoming_tx = self.incoming_tx.clone();
         let inc_client_tx = self.inc_client_tx.clone();
