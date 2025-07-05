@@ -12,6 +12,8 @@ use tracing::{error, info};
 
 use crate::{Message, NodeId, RaftError, StateMachine, INC_CHANNEL_SIZE};
 
+pub mod codec;
+
 type ClientRequest<S> = (Message<S>, oneshot::Sender<Message<S>>);
 type ClientReceiver<S> = mpsc::Receiver<ClientRequest<S>>;
 type ClientSender<S> = mpsc::Sender<ClientRequest<S>>;

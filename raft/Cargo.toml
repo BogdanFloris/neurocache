@@ -10,3 +10,5 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 dashmap = { workspace = true }
+tokio-util = { workspace = true }
+tokio-serde = { workspace = true }
