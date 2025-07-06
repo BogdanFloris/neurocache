@@ -1,4 +1,4 @@
-use std:: net::SocketAddr;
+use std::net::SocketAddr;
 
 use codec::framed_stream;
 use futures::sink::SinkExt;
