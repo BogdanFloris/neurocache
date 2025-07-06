@@ -1,7 +1,9 @@
-use std::{io, net::SocketAddr};
+use std:: net::SocketAddr;
 
+use codec::framed_stream;
+use futures::sink::SinkExt;
+use futures::stream::TryStreamExt;
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
     sync::{
         mpsc,
@@ -89,11 +91,12 @@ impl<S: StateMachine> PeerNetwork<S> {
 }
 
 async fn handle_inc_conn<S: StateMachine>(
-    mut stream: TcpStream,
+    stream: TcpStream,
     incoming_tx: mpsc::Sender<Message<S>>,
     inc_client_tx: ClientSender<S>,
 ) -> Result<(), RaftError> {
-    let first_msg = recv_message(&mut stream).await?;
+    let mut framed = framed_stream::<S>(stream);
+    let first_msg = framed.try_next().await?.ok_or(RaftError::Disconnected)?;
     if let Message::ClientCommand { .. } = first_msg {
         let (resp_tx, resp_rx) = oneshot::channel();
         inc_client_tx
@@ -101,48 +104,18 @@ async fn handle_inc_conn<S: StateMachine>(
             .await
             .map_err(|_| RaftError::Disconnected)?;
         let response = resp_rx.await?;
-        send_message(&mut stream, &response).await?;
-        Ok(())
+        framed.send(response).await?;
     } else {
         incoming_tx
             .send(first_msg)
             .await
             .map_err(|_| RaftError::Disconnected)?;
-        loop {
-            let msg = recv_message(&mut stream).await?;
+        while let Some(msg) = framed.try_next().await? {
             incoming_tx
                 .send(msg)
                 .await
                 .map_err(|_| RaftError::Disconnected)?;
         }
     }
-}
-
-/// Send a Message<S> to the stream using length prefixed codec.
-async fn send_message<S: StateMachine>(
-    stream: &mut TcpStream,
-    msg: &Message<S>,
-) -> Result<(), RaftError> {
-    let bytes = serde_json::to_vec(&msg)?;
-    let len: u32 = bytes
-        .len()
-        .try_into()
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "message too large"))?;
-    stream.write_all(&len.to_be_bytes()).await?;
-    stream.write_all(&bytes).await?;
-    stream.flush().await?;
     Ok(())
-}
-
-/// Receive a Message<S> from the reader using a length prefixed codec.
-async fn recv_message<S: StateMachine>(stream: &mut TcpStream) -> Result<Message<S>, RaftError> {
-    let mut len_buf = [0u8; 4];
-    stream.read_exact(&mut len_buf).await?;
-
-    let len = u32::from_be_bytes(len_buf) as usize;
-    let mut msg_buf = vec![0u8; len];
-    stream.read_exact(&mut msg_buf).await?;
-
-    let msg = serde_json::from_slice(&msg_buf)?;
-    Ok(msg)
 }

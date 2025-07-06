@@ -42,8 +42,8 @@ pub enum RaftError {
 }
 
 pub trait StateMachine {
-    type Command: Serialize + DeserializeOwned + Clone + PartialEq + Default + Send + Sync;
-    type Response: Serialize + DeserializeOwned + Clone + PartialEq + Send + Sync;
+    type Command: Serialize + DeserializeOwned + Clone + PartialEq + Default + Send + Sync + Unpin;
+    type Response: Serialize + DeserializeOwned + Clone + PartialEq + Send + Sync + Unpin;
 
     fn apply(&mut self, command: Self::Command) -> Self::Response;
 }
