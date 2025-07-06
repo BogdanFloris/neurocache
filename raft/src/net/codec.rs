@@ -1,6 +1,6 @@
 use tokio::net::TcpStream;
 use tokio_serde::formats::SymmetricalJson;
-use tokio_serde::{Framed as SerdeFramed};
+use tokio_serde::Framed as SerdeFramed;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 use crate::{Message, StateMachine};
