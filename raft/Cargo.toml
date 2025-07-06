@@ -12,3 +12,4 @@ tracing = { workspace = true }
 dashmap = { workspace = true }
 tokio-util = { workspace = true }
 tokio-serde = { workspace = true }
+futures = { workspace = true }
