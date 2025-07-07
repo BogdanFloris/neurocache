@@ -19,6 +19,7 @@ pub enum Message<S: StateMachine + Clone> {
     AppendEntries {
         prev_log_index: Index,
         prev_log_term: Term,
+        leader_id: NodeId,
         entries: Vec<Entry<S::Command>>,
         leader_commit: Index,
         term: Term,

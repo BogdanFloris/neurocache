@@ -107,6 +107,11 @@ impl<S: StateMachine + Clone> PeerNetwork<S> {
         self.outbound_pool.send(id, msg).await
     }
 
+    /// Broadcasts the message to all peers using the outbound pool.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RaftError` if the outbound pool send fails.
     pub async fn broadcast(&self, msg: Message<S>) -> Result<(), RaftError> {
         for id in self.outbound_pool.peers() {
             let msg = msg.clone();
