@@ -58,15 +58,14 @@ impl<S: StateMachine + Clone> OutboundPool<S> {
                         while let Some(msg) = rx.recv().await {
                             if let Err(e) = framed.send(msg).await {
                                 error!(?e, %peer, "send error: reconnecting");
-                                break
+                                break;
                             }
-                            
                         }
-                    },
+                    }
                     Err(e) => {
                         error!(?e, %peer, "connect failed: retrying in 1s");
                         tokio::time::sleep(Duration::from_secs(1)).await;
-                    },
+                    }
                 }
             }
         });

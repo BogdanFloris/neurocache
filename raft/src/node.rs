@@ -69,10 +69,21 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
     }
 
     async fn handle_peer_msg(&mut self, msg: Message<S>) -> Result<(), RaftError> {
-        if let Message::AppendEntries { prev_log_index, prev_log_term, leader_id, entries, leader_commit, term } = msg {
+        if let Message::AppendEntries {
+            prev_log_index,
+            prev_log_term,
+            leader_id,
+            entries,
+            leader_commit,
+            term,
+        } = msg
+        {
             info!("received append entries: {prev_log_index}, {prev_log_term}, {leader_id}, {leader_commit}, {term}");
             assert!(entries.is_empty());
-            let response = Message::AppendEntriesResponse { success: true, term: 0 };
+            let response = Message::AppendEntriesResponse {
+                success: true,
+                term: 0,
+            };
             self.peer_network.send_to(leader_id, response).await?;
         }
         Ok(())
