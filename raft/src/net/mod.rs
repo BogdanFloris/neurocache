@@ -1,8 +1,9 @@
-use std::net::SocketAddr;
+use std::{collections::HashMap, net::SocketAddr};
 
 use codec::framed_stream;
 use futures::sink::SinkExt;
 use futures::stream::TryStreamExt;
+use outbound::OutboundPool;
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::{
@@ -15,25 +16,32 @@ use tracing::{error, info};
 use crate::{Message, NodeId, RaftError, StateMachine, INC_CHANNEL_SIZE};
 
 pub mod codec;
+pub mod outbound;
 
 type ClientRequest<S> = (Message<S>, oneshot::Sender<Message<S>>);
 type ClientReceiver<S> = mpsc::Receiver<ClientRequest<S>>;
 type ClientSender<S> = mpsc::Sender<ClientRequest<S>>;
 
-pub struct PeerNetwork<S: StateMachine> {
+pub struct PeerNetwork<S: StateMachine + Clone + 'static> {
     node_id: NodeId,
     listen_addr: SocketAddr,
     incoming_tx: mpsc::Sender<Message<S>>,
     incoming_rx: mpsc::Receiver<Message<S>>,
     inc_client_tx: ClientSender<S>,
     inc_client_rx: ClientReceiver<S>,
+    outbound_pool: OutboundPool<S>,
 }
 
-impl<S: StateMachine> PeerNetwork<S> {
+impl<S: StateMachine + Clone> PeerNetwork<S> {
     #[must_use]
-    pub fn new(node_id: NodeId, listen_addr: SocketAddr) -> Self {
+    pub fn new(
+        node_id: NodeId,
+        listen_addr: SocketAddr,
+        peer_addrs: HashMap<NodeId, SocketAddr>,
+    ) -> Self {
         let (incoming_tx, incoming_rx) = mpsc::channel(INC_CHANNEL_SIZE);
         let (inc_client_tx, inc_client_rx) = mpsc::channel(INC_CHANNEL_SIZE);
+        let outbound_pool = OutboundPool::new(peer_addrs);
 
         Self {
             node_id,
@@ -42,6 +50,7 @@ impl<S: StateMachine> PeerNetwork<S> {
             incoming_rx,
             inc_client_tx,
             inc_client_rx,
+            outbound_pool,
         }
     }
 
@@ -88,9 +97,26 @@ impl<S: StateMachine> PeerNetwork<S> {
 
         Ok(())
     }
+
+    /// Sends the message to the peer using the outbound pool.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RaftError` if the outbound pool send fails.
+    pub async fn send_to(&self, id: NodeId, msg: Message<S>) -> Result<(), RaftError> {
+        self.outbound_pool.send(id, msg).await
+    }
+
+    pub async fn broadcast(&self, msg: Message<S>) -> Result<(), RaftError> {
+        for id in self.outbound_pool.peers() {
+            let msg = msg.clone();
+            let _ = self.outbound_pool.send(id, msg).await;
+        }
+        Ok(())
+    }
 }
 
-async fn handle_inc_conn<S: StateMachine>(
+async fn handle_inc_conn<S: StateMachine + Clone>(
     stream: TcpStream,
     incoming_tx: mpsc::Sender<Message<S>>,
     inc_client_tx: ClientSender<S>,

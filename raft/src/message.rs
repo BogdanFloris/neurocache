@@ -15,7 +15,7 @@ pub enum RaftResponse<R> {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type")]
-pub enum Message<S: StateMachine> {
+pub enum Message<S: StateMachine + Clone> {
     AppendEntries {
         prev_log_index: Index,
         prev_log_term: Term,

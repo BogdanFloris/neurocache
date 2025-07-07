@@ -2,15 +2,16 @@ use tracing::info;
 
 use crate::{Config, Message, NodeId, PeerNetwork, RaftError, RaftResponse, StateMachine};
 
-pub struct RaftNode<S: StateMachine> {
+pub struct RaftNode<S: StateMachine + Clone + 'static> {
     id: NodeId,
     state_machine: S,
     peer_network: PeerNetwork<S>,
 }
 
-impl<S: StateMachine + 'static> RaftNode<S> {
+impl<S: StateMachine + Clone + 'static> RaftNode<S> {
     pub fn new(config: &Config, state_machine: S) -> Self {
-        let peer_network: PeerNetwork<S> = PeerNetwork::new(config.id, config.addr);
+        let peer_addrs = config.peers.iter().map(|p| (p.id, p.addr)).collect();
+        let peer_network: PeerNetwork<S> = PeerNetwork::new(config.id, config.addr, peer_addrs);
 
         RaftNode {
             id: config.id,

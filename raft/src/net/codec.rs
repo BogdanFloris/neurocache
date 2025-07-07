@@ -12,7 +12,7 @@ pub type JsonFrame<S> = SerdeFramed<
     SymmetricalJson<Message<S>>,
 >;
 
-pub fn framed_stream<S: StateMachine>(stream: TcpStream) -> JsonFrame<S> {
+pub fn framed_stream<S: StateMachine + Clone>(stream: TcpStream) -> JsonFrame<S> {
     let length_codec = LengthDelimitedCodec::builder()
         .length_field_type::<u32>()
         .new_codec();

@@ -51,7 +51,7 @@ impl KvResponse {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct KvStore {
     store: HashMap<String, String>,
 }
