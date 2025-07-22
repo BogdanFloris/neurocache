@@ -30,7 +30,7 @@
 cargo build --workspace
 
 # Run a node
-cargo run --bin neurod -- --id 1 --config nodes.yaml
+cargo run --bin neurod -- -c test_cluster/node_1.json
 
 # Client operations
 cargo run --bin neuroctl -- --endpoints 127.0.0.1:7001 put alpha 123
