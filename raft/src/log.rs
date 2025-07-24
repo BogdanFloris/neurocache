@@ -41,6 +41,13 @@ impl<C: Default> Default for Log<C> {
     }
 }
 
+impl<C: Default> Log<C> {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
 impl<C> Log<C> {
     /// Returns the element at `idx` in the Log
     ///
@@ -53,6 +60,40 @@ impl<C> Log<C> {
         self.entries
             .get(index)
             .ok_or(LogError::IndexOutOfBounds(idx))
+    }
+
+    #[must_use]
+    pub fn get(&self, idx: Index) -> Option<&Entry<C>> {
+        match usize::try_from(idx) {
+            Ok(i) => self.entries.get(i),
+            Err(_) => None,
+        }
+    }
+
+    #[must_use]
+    pub fn last_index(&self) -> Index {
+        (self.entries.len() - 1) as Index
+    }
+
+    #[must_use]
+    pub fn last_term(&self) -> Term {
+        self.entries.last().map_or(0, |e| e.term)
+    }
+}
+
+impl<C: Clone> Log<C> {
+    /// Retrives the entries from the log starting from `start`
+    ///
+    /// # Errors
+    ///
+    /// Returns `LogError::CastError` if casting fails.
+    pub fn entries_from(&self, start: Index) -> Result<Vec<Entry<C>>, LogError> {
+        let start_idx = usize::try_from(start)?;
+        if start_idx >= self.entries.len() {
+            Ok(Vec::new())
+        } else {
+            Ok(self.entries[start_idx..].to_vec())
+        }
     }
 }
 
