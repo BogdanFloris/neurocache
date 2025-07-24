@@ -143,3 +143,4 @@ zig test zig/slab.zig
 - When to switch from TCP to QUIC
 - Snapshot compression (zstd or raw mmap?)
 - Should we add metrics collection before Raft implementation?
+- Right now, reads also go through the log. Think about improving processing speed by confirming leadership without going through the log (we need to confirm leadership to make sure we don't serve stale reads). This should be done by splitting read requests from write requests, adding read requests to a pending read requests queue, and sending a heartbeat to confirm leadership. If leadership is confirmed we can process read requests from the queue. (This is the ReadIndex approach used by etcd)
