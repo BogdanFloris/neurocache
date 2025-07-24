@@ -27,6 +27,8 @@ pub enum Message<S: StateMachine + Clone> {
     AppendEntriesResponse {
         success: bool,
         term: Term,
+        follower_id: NodeId,
+        match_index: Index,
     },
     ClientCommand {
         command: S::Command,
