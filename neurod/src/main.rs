@@ -8,18 +8,21 @@ use tracing::{error, info};
 struct Args {
     #[arg(short, long)]
     config_file: String,
+    #[arg(short, long, default_value_t = tracing::Level::INFO)]
+    verbosity: tracing::Level,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), NeuroError> {
+    let args = Args::parse();
     let subscriber = tracing_subscriber::fmt()
         .compact()
         .with_line_number(true)
+        .with_max_level(args.verbosity)
         .with_thread_ids(true)
         .finish();
     tracing::subscriber::set_global_default(subscriber)?;
 
-    let args = Args::parse();
     let config = Config::from_file(args.config_file.as_str())?;
     let store = KvStore::new();
     let node = RaftNode::new(&config, store);
