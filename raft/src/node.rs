@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    net::SocketAddr,
     time::{Duration, Instant},
 };
 
@@ -21,6 +22,7 @@ pub enum NodeState {
 
 pub struct RaftNode<S: StateMachine + Clone + 'static> {
     id: NodeId,
+    leader_id: NodeId,
     state: NodeState,
     current_term: Term,
     voted_for: Option<NodeId>,
@@ -35,12 +37,15 @@ pub struct RaftNode<S: StateMachine + Clone + 'static> {
 
     state_machine: S,
     peer_network: PeerNetwork<S>,
+    peer_addrs: HashMap<NodeId, SocketAddr>,
 }
 
 impl<S: StateMachine + Clone + 'static> RaftNode<S> {
     pub fn new(config: &Config, state_machine: S) -> Self {
-        let peer_addrs = config.peers.iter().map(|p| (p.id, p.addr)).collect();
-        let peer_network: PeerNetwork<S> = PeerNetwork::new(config.id, config.addr, peer_addrs);
+        let peer_addrs: HashMap<NodeId, SocketAddr> =
+            config.peers.iter().map(|p| (p.id, p.addr)).collect();
+        let peer_network: PeerNetwork<S> =
+            PeerNetwork::new(config.id, config.addr, peer_addrs.clone());
 
         let mut next_index = HashMap::new();
         let mut match_index = HashMap::new();
@@ -61,6 +66,7 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
 
         RaftNode {
             id: config.id,
+            leader_id: 1,
             state,
             current_term: 0,
             voted_for: None,
@@ -72,6 +78,7 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
             total_nodes,
             state_machine,
             peer_network,
+            peer_addrs,
         }
     }
 
@@ -111,9 +118,9 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
                 }
                 // Client to node message
                 Some((msg, resp_tx)) = client_rx.recv() => {
-                    if let Some(resp) = self.handle_client_msg(msg) {
+                    if let Some(response) = self.handle_client_msg(msg) {
                         let _ = resp_tx.send(Message::ClientResponse {
-                            response: RaftResponse::Ok(resp),
+                            response,
                         });
 
                         if self.state == NodeState::Leader {
@@ -127,7 +134,7 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
         }
     }
 
-    fn handle_client_msg(&mut self, msg: Message<S>) -> Option<S::Response> {
+    fn handle_client_msg(&mut self, msg: Message<S>) -> Option<RaftResponse<S::Response>> {
         match msg {
             Message::ClientCommand { command } => {
                 if self.state == NodeState::Leader {
@@ -140,10 +147,14 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
 
                     // Apply immediately for now (not waiting for replication)
                     // TODO: implement replication
-                    Some(self.state_machine.apply(command))
+                    let resp = self.state_machine.apply(command);
+                    Some(RaftResponse::Ok(resp))
                 } else {
-                    // TODO: Redirect to leader or return NotLeader error
-                    None
+                    let leader_addr = self.peer_addrs.get(&self.leader_id)?;
+                    Some(RaftResponse::NotLeader {
+                        leader_id: self.leader_id,
+                        leader_addr: *leader_addr,
+                    })
                 }
             }
             _ => None,
