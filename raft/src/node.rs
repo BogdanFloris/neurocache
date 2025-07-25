@@ -187,7 +187,6 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
                 follower_id,
                 match_index,
             } => {
-                // TODO: this might not be correct because of heartbeats?
                 if self.state == NodeState::Leader {
                     self.handle_append_entries_response(term, success, follower_id, match_index);
                 }
