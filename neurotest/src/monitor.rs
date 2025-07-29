@@ -26,7 +26,7 @@ pub async fn start() -> Result<(), MonitorError> {
     println!("Starting monitoring stack (Prometheus + Grafana)...");
 
     let output = Command::new("docker")
-        .args(&["compose", "up", "-d"])
+        .args(["compose", "up", "-d"])
         .output()
         .await?;
 
@@ -53,7 +53,7 @@ pub async fn stop() -> Result<(), MonitorError> {
     println!("Stopping monitoring stack...");
 
     let output = Command::new("docker")
-        .args(&["compose", "down"])
+        .args(["compose", "down"])
         .output()
         .await?;
 
@@ -77,7 +77,7 @@ pub async fn status() -> Result<(), MonitorError> {
 
     // Check docker compose status
     let output = Command::new("docker")
-        .args(&["compose", "ps", "--format", "json"])
+        .args(["compose", "ps", "--format", "json"])
         .output()
         .await?;
 
@@ -88,7 +88,7 @@ pub async fn status() -> Result<(), MonitorError> {
 
     // Parse docker compose output
     let output_str = String::from_utf8_lossy(&output.stdout);
-    let lines: Vec<&str> = output_str.trim().split('\n').collect();
+    let lines: Vec<&str> = output_str.lines().collect();
 
     let mut prometheus_running = false;
     let mut grafana_running = false;
