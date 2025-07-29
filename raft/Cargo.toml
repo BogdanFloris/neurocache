@@ -13,3 +13,4 @@ dashmap = { workspace = true }
 tokio-util = { workspace = true }
 tokio-serde = { workspace = true }
 futures = { workspace = true }
+metrics = { workspace = true }

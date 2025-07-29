@@ -5,6 +5,7 @@ use serde::{de::DeserializeOwned, Serialize};
 pub mod config;
 pub mod log;
 pub mod message;
+pub mod metrics;
 pub mod net;
 pub mod node;
 
