@@ -1,6 +1,6 @@
-use std::{collections::HashMap, error::Error, io};
+use std::{collections::HashMap, error::Error, io, time::Instant};
 
-use raft::{RaftError, StateMachine};
+use raft::{metrics, RaftError, StateMachine};
 use serde::{Deserialize, Serialize};
 use tracing::subscriber::SetGlobalDefaultError;
 
@@ -70,24 +70,38 @@ impl StateMachine for KvStore {
     type Response = KvResponse;
 
     fn apply(&mut self, command: Self::Command) -> Self::Response {
-        match command {
+        let start = Instant::now();
+        let response = match &command {
             KvCommand::Noop => KvResponse::ok(None),
-            KvCommand::Get { key } => self
-                .store
-                .get(&key)
-                .map_or(KvResponse::NotFound, |v| KvResponse::ok(Some(v.clone()))),
+            KvCommand::Get { key } => {
+                let result = self
+                    .store
+                    .get(key)
+                    .map_or(KvResponse::NotFound, |v| KvResponse::ok(Some(v.clone())));
+                metrics::record_kvstore_operation("get", start.elapsed().as_secs_f64());
+                result
+            }
             KvCommand::Put { key, value } => {
                 if key.is_empty() || key.len() > MAX_KEY_LEN || !key.is_ascii() {
+                    metrics::record_kvstore_operation("put", start.elapsed().as_secs_f64());
                     return KvResponse::InvalidKey;
                 }
-                self.store.insert(key, value);
+                self.store.insert(key.clone(), value.clone());
+                metrics::record_kvstore_operation("put", start.elapsed().as_secs_f64());
+                metrics::record_kvstore_size(self.store.len());
                 KvResponse::ok(None)
             }
-            KvCommand::Del { key } => self
-                .store
-                .remove(&key)
-                .map_or(KvResponse::NotFound, |v| KvResponse::ok(Some(v))),
-        }
+            KvCommand::Del { key } => {
+                let result = self
+                    .store
+                    .remove(key)
+                    .map_or(KvResponse::NotFound, |v| KvResponse::ok(Some(v)));
+                metrics::record_kvstore_operation("del", start.elapsed().as_secs_f64());
+                metrics::record_kvstore_size(self.store.len());
+                result
+            }
+        };
+        response
     }
 }
 

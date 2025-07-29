@@ -12,6 +12,9 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+metrics = { workspace = true }
+metrics-exporter-prometheus = { workspace = true }
+axum = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

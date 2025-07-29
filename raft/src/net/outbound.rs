@@ -5,7 +5,7 @@ use futures::SinkExt;
 use tokio::{net::TcpStream, sync::mpsc};
 use tracing::error;
 
-use crate::{Message, NodeId, RaftError, StateMachine, OUT_CHANNEL_SIZE};
+use crate::{metrics, Message, NodeId, RaftError, StateMachine, OUT_CHANNEL_SIZE};
 
 use super::codec::framed_stream;
 
@@ -56,14 +56,18 @@ impl<S: StateMachine + Clone> OutboundPool<S> {
                     Ok(stream) => {
                         let mut framed = framed_stream::<S>(stream);
                         while let Some(msg) = rx.recv().await {
+                            let timer = metrics::Timer::new("raft_message_send_duration_seconds");
                             if let Err(e) = framed.send(msg).await {
                                 error!(?e, %peer, "send error: reconnecting");
+                                metrics::record_connection_error(peer.into());
                                 break;
                             }
+                            timer.observe();
                         }
                     }
                     Err(e) => {
                         error!(?e, %peer, "connect failed: retrying in 1s");
+                        metrics::record_connection_error(peer.into());
                         tokio::time::sleep(Duration::from_secs(1)).await;
                     }
                 }
