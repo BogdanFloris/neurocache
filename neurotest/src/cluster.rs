@@ -93,8 +93,7 @@ impl ClusterManager {
                 .args(["--config-file", config_file.to_str().unwrap()])
                 .args(["--metrics-addr", &node.metrics_addr])
                 .stdout(Stdio::from(log_file_handle.try_clone()?))
-                .stderr(Stdio::from(log_file_handle))
-                .kill_on_drop(true);
+                .stderr(Stdio::from(log_file_handle));
 
             if single_mode && node.id == 1 {
                 cmd.arg("--single");
