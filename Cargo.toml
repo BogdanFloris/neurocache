@@ -3,6 +3,7 @@ members = [
     "raft",
     "neurod", 
     "neuroctl",
+    "neurotest",
 ]
 resolver = "3"
 

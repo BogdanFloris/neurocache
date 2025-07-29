@@ -1,0 +1,15 @@
+[cluster]
+base_raft_port = 3001
+base_metrics_port = 9091
+default_nodes = 3
+
+[paths]
+logs_dir = "logs"
+state_file = ".cluster_state.json"
+test_cluster_dir = "."
+
+[monitoring]
+enabled = true
+prometheus_port = 9090
+grafana_port = 3000
+compose_file = "docker-compose.yml"

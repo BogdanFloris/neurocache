@@ -1,0 +1,28 @@
+[package]
+name = "neurotest"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Additional dependencies for neurotest
+toml = "0.8"
+colored = "2"
+indicatif = "0.17"
+tempfile = "3"
+which = "6"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+nix = { version = "0.29", features = ["signal", "process"] }
+chrono = "0.4"
+rand = "0.8"
+
+# For interacting with neurod/neuroctl
+neurod = { path = "../neurod" }
+raft = { path = "../raft" }
