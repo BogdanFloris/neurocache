@@ -156,7 +156,16 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
         resp_tx: oneshot::Sender<Message<S>>,
     ) -> Result<(), RaftError> {
         let timer = Timer::new("raft_client_request_duration_seconds");
+        let result = self.handle_client_msg_inner(msg, resp_tx).await;
+        timer.observe();
+        result
+    }
 
+    async fn handle_client_msg_inner(
+        &mut self,
+        msg: Message<S>,
+        resp_tx: oneshot::Sender<Message<S>>,
+    ) -> Result<(), RaftError> {
         if let Message::ClientCommand { command } = msg {
             metrics::record_message_received("ClientCommand");
             if self.state != NodeState::Leader {
@@ -188,7 +197,6 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
             self.send_append_entries().await?;
         }
 
-        timer.observe();
         Ok(())
     }
 
