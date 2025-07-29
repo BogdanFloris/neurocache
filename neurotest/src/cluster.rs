@@ -63,10 +63,7 @@ impl ClusterManager {
 
         if !build_status.success() {
             println!("{}", "✗ Build failed!".red());
-            return Err(ClusterError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Build failed",
-            )));
+            return Err(ClusterError::Io(std::io::Error::other("Build failed")));
         }
         println!("{}", "✓ Build successful".green());
 
@@ -101,10 +98,7 @@ impl ClusterManager {
 
             let child = cmd.spawn()?;
             let pid = child.id().ok_or_else(|| {
-                ClusterError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Failed to get process ID",
-                ))
+                ClusterError::Io(std::io::Error::other("Failed to get process ID"))
             })?;
 
             sleep(Duration::from_secs(2)).await;
