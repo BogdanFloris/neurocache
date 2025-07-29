@@ -4,7 +4,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use tokio::time::{interval_at, MissedTickBehavior};
+use tokio::{
+    sync::oneshot,
+    time::{interval_at, MissedTickBehavior},
+};
 use tracing::{debug, info};
 
 use crate::{
@@ -38,6 +41,7 @@ pub struct RaftNode<S: StateMachine + Clone + 'static> {
     state_machine: S,
     peer_network: PeerNetwork<S>,
     peer_addrs: HashMap<NodeId, SocketAddr>,
+    pending_client_requests: HashMap<Index, oneshot::Sender<Message<S>>>,
 }
 
 impl<S: StateMachine + Clone + 'static> RaftNode<S> {
@@ -63,6 +67,7 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
             info!("node {} starting as follower", config.id);
             NodeState::Follower
         };
+        let pending_client_requests = HashMap::new();
 
         RaftNode {
             id: config.id,
@@ -79,6 +84,7 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
             state_machine,
             peer_network,
             peer_addrs,
+            pending_client_requests,
         }
     }
 
@@ -118,47 +124,46 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
                 }
                 // Client to node message
                 Some((msg, resp_tx)) = client_rx.recv() => {
-                    if let Some(response) = self.handle_client_msg(msg) {
-                        let _ = resp_tx.send(Message::ClientResponse {
-                            response,
-                        });
+                    self.handle_client_msg(msg, resp_tx).await?;
 
-                        if self.state == NodeState::Leader {
-                            debug!("processed client command, sending append entries immediately");
-                            self.send_append_entries().await?;
-                            heartbeat_interval.reset();
-                        }
+                    if self.state == NodeState::Leader {
+                        heartbeat_interval.reset();
                     }
                 }
             }
         }
     }
 
-    fn handle_client_msg(&mut self, msg: Message<S>) -> Option<RaftResponse<S::Response>> {
-        match msg {
-            Message::ClientCommand { command } => {
-                if self.state == NodeState::Leader {
-                    let entry = crate::log::Entry {
-                        term: self.current_term,
-                        command: command.clone(),
-                    };
-                    self.log.entries.push(entry);
-                    info!("leader appended entry at index {}", self.log.last_index());
-
-                    // Apply immediately for now (not waiting for replication)
-                    // TODO: implement replication
-                    let resp = self.state_machine.apply(command);
-                    Some(RaftResponse::Ok(resp))
-                } else {
-                    let leader_addr = self.peer_addrs.get(&self.leader_id)?;
-                    Some(RaftResponse::NotLeader {
+    async fn handle_client_msg(
+        &mut self,
+        msg: Message<S>,
+        resp_tx: oneshot::Sender<Message<S>>,
+    ) -> Result<(), RaftError> {
+        if let Message::ClientCommand { command } = msg {
+            if self.state != NodeState::Leader {
+                let leader_addr = self
+                    .peer_addrs
+                    .get(&self.leader_id)
+                    .ok_or(RaftError::UnknownPeer(self.leader_id))?;
+                let _ = resp_tx.send(Message::ClientResponse {
+                    response: RaftResponse::NotLeader {
                         leader_id: self.leader_id,
                         leader_addr: *leader_addr,
-                    })
-                }
+                    },
+                });
+                return Ok(());
             }
-            _ => None,
+            let entry = crate::log::Entry {
+                term: self.current_term,
+                command: command.clone(),
+            };
+            self.log.entries.push(entry);
+            let entry_index = self.log.last_index();
+            debug!("leader appended entry at index {}", entry_index);
+            self.pending_client_requests.insert(entry_index, resp_tx);
+            self.send_append_entries().await?;
         }
+        Ok(())
     }
 
     async fn handle_peer_msg(&mut self, msg: Message<S>) -> Result<(), RaftError> {
@@ -206,9 +211,7 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
         leader_commit: Index,
     ) -> Result<(), RaftError> {
         if term > self.current_term {
-            self.current_term = term;
-            self.voted_for = None;
-            self.state = NodeState::Follower;
+            self.transition_to_follower(term, Some(leader_id));
         }
 
         let success = if term < self.current_term {
@@ -249,9 +252,7 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
         match_idx: Index,
     ) {
         if term > self.current_term {
-            self.current_term = term;
-            self.voted_for = None;
-            self.state = NodeState::Follower;
+            self.transition_to_follower(term, None);
             return;
         }
 
@@ -276,7 +277,13 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
         while self.last_applied < self.commit_index {
             self.last_applied += 1;
             if let Some(entry) = self.log.get(self.last_applied) {
-                self.state_machine.apply(entry.command.clone());
+                let resp = self.state_machine.apply(entry.command.clone());
+
+                if let Some(resp_tx) = self.pending_client_requests.remove(&self.last_applied) {
+                    let _ = resp_tx.send(Message::ClientResponse {
+                        response: RaftResponse::Ok(resp),
+                    });
+                }
             }
         }
     }
@@ -308,6 +315,28 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
         }
 
         self.apply_committed_entries();
+    }
+
+    fn transition_to_follower(&mut self, new_term: Term, new_leader: Option<NodeId>) {
+        self.current_term = new_term;
+        self.voted_for = None;
+        self.state = NodeState::Follower;
+
+        if let Some(leader) = new_leader {
+            self.leader_id = leader;
+        }
+
+        // Fail pending client requests
+        for (_, resp_tx) in self.pending_client_requests.drain() {
+            if let Some(leader_addr) = self.peer_addrs.get(&self.leader_id) {
+                let _ = resp_tx.send(Message::ClientResponse {
+                    response: RaftResponse::NotLeader {
+                        leader_id: self.leader_id,
+                        leader_addr: *leader_addr,
+                    },
+                });
+            }
+        }
     }
 
     async fn send_append_entries(&self) -> Result<(), RaftError> {
