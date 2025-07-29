@@ -119,7 +119,7 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
         let start = Instant::now() + heartbeat_period;
         let mut heartbeat_interval = interval_at(start.into(), heartbeat_period);
         heartbeat_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
-        
+
         let mut last_heartbeat = Instant::now();
 
         loop {
@@ -156,7 +156,7 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
         resp_tx: oneshot::Sender<Message<S>>,
     ) -> Result<(), RaftError> {
         let timer = Timer::new("raft_client_request_duration_seconds");
-        
+
         if let Message::ClientCommand { command } = msg {
             metrics::record_message_received("ClientCommand");
             if self.state != NodeState::Leader {
@@ -180,14 +180,14 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
             let entry_index = self.log.last_index();
             debug!("leader appended entry at index {}", entry_index);
             self.pending_client_requests.insert(entry_index, resp_tx);
-            
+
             // Update metrics
             metrics::record_log_size(self.log.entries.len());
             metrics::record_pending_requests(self.pending_client_requests.len());
-            
+
             self.send_append_entries().await?;
         }
-        
+
         timer.observe();
         Ok(())
     }
@@ -195,10 +195,12 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
     async fn handle_peer_msg(&mut self, msg: Message<S>) -> Result<(), RaftError> {
         match &msg {
             Message::AppendEntries { .. } => metrics::record_message_received("AppendEntries"),
-            Message::AppendEntriesResponse { .. } => metrics::record_message_received("AppendEntriesResponse"),
+            Message::AppendEntriesResponse { .. } => {
+                metrics::record_message_received("AppendEntriesResponse")
+            }
             _ => {}
         }
-        
+
         match msg {
             Message::AppendEntries {
                 term,
@@ -275,7 +277,7 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
             follower_id: self.id,
             match_index: match_idx,
         };
-        
+
         timer.observe();
         metrics::record_message_sent("AppendEntriesResponse", leader_id);
         self.peer_network.send_to(leader_id, response).await?;
@@ -362,7 +364,7 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
         self.current_term = new_term;
         self.voted_for = None;
         self.state = NodeState::Follower;
-        
+
         metrics::record_term(self.current_term);
         metrics::record_node_state(self.state);
 
@@ -405,9 +407,12 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
             };
 
             // Record replication lag
-            let lag = self.log.last_index().saturating_sub(self.match_index.get(&peer_id).copied().unwrap_or(0));
+            let lag = self
+                .log
+                .last_index()
+                .saturating_sub(self.match_index.get(&peer_id).copied().unwrap_or(0));
             metrics::record_replication_lag(peer_id.into(), lag);
-            
+
             metrics::record_message_sent("AppendEntries", peer_id.into());
             self.peer_network.send_to(peer_id, msg).await?;
         }
