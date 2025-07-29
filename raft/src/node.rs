@@ -196,7 +196,7 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
         match &msg {
             Message::AppendEntries { .. } => metrics::record_message_received("AppendEntries"),
             Message::AppendEntriesResponse { .. } => {
-                metrics::record_message_received("AppendEntriesResponse")
+                metrics::record_message_received("AppendEntriesResponse");
             }
             _ => {}
         }
@@ -413,7 +413,7 @@ impl<S: StateMachine + Clone + 'static> RaftNode<S> {
                 .saturating_sub(self.match_index.get(&peer_id).copied().unwrap_or(0));
             metrics::record_replication_lag(peer_id.into(), lag);
 
-            metrics::record_message_sent("AppendEntries", peer_id.into());
+            metrics::record_message_sent("AppendEntries", peer_id);
             self.peer_network.send_to(peer_id, msg).await?;
         }
         Ok(())
