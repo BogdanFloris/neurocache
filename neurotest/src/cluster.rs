@@ -373,6 +373,23 @@ impl ClusterManager {
             println!("{}", "✓ Removed state file".green());
         }
 
+        // Clean node config files
+        for entry in fs::read_dir(".")? {
+            let entry = entry?;
+            let path = entry.path();
+            if let Some(name) = path.file_name() {
+                if name.to_string_lossy().starts_with("node_")
+                    && name.to_string_lossy().ends_with(".json")
+                {
+                    fs::remove_file(&path)?;
+                    println!(
+                        "{}",
+                        format!("✓ Removed {}", name.to_string_lossy()).green()
+                    );
+                }
+            }
+        }
+
         // Clean logs if requested
         if clean_logs && self.config.logs_dir().exists() {
             fs::remove_dir_all(self.config.logs_dir())?;
