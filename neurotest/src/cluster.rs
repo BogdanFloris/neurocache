@@ -1,7 +1,7 @@
 use crate::config::{ClusterState, Config, NodeState};
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
-use std::{fs, process::Stdio, time::Duration};
+use std::{fs, num::TryFromIntError, process::Stdio, time::Duration};
 use thiserror::Error;
 use tokio::{process::Command, time::sleep};
 
@@ -21,6 +21,8 @@ pub enum ClusterError {
     NodeStartFailed(u64),
     #[error("Dependency not found: {0}")]
     DependencyNotFound(String),
+    #[error("failed to convert index to usize")]
+    CastError(#[from] TryFromIntError),
 }
 
 pub struct ClusterManager {
@@ -33,19 +35,15 @@ impl ClusterManager {
     }
 
     pub async fn start(&self, num_nodes: usize, single_mode: bool) -> Result<(), ClusterError> {
-        // Check if cluster is already running
-        if self.is_running()? {
+        if self.is_running() {
             return Err(ClusterError::AlreadyRunning);
         }
 
-        // Check dependencies
-        self.check_dependencies()?;
+        Self::check_dependencies()?;
 
-        // Create necessary directories
         fs::create_dir_all(&self.config.paths.logs_dir)?;
         fs::create_dir_all(&self.config.paths.test_cluster_dir)?;
 
-        // Build the project first
         println!("{}", "Building project...".yellow());
         let pb = ProgressBar::new_spinner();
         pb.set_style(
@@ -57,7 +55,7 @@ impl ClusterManager {
         pb.enable_steady_tick(Duration::from_millis(100));
 
         let build_status = Command::new("cargo")
-            .args(&["build", "--bin", "neurod"])
+            .args(["build", "--bin", "neurod"])
             .status()
             .await?;
 
@@ -72,7 +70,6 @@ impl ClusterManager {
         }
         println!("{}", "✓ Build successful".green());
 
-        // Generate node configurations
         let nodes = self.config.generate_node_configs(num_nodes);
         let mut state = ClusterState {
             nodes: Vec::new(),
@@ -80,7 +77,7 @@ impl ClusterManager {
         };
 
         // Start each node
-        println!("\n{}", format!("Starting {} nodes...", num_nodes).green());
+        println!("\n{}", format!("Starting {num_nodes} nodes...").green());
         for node in &nodes {
             print!("Starting node {}... ", node.id);
 
@@ -92,9 +89,9 @@ impl ClusterManager {
             let log_file_handle = fs::File::create(&log_file)?;
 
             let mut cmd = Command::new("cargo");
-            cmd.args(&["run", "--bin", "neurod", "--"])
-                .args(&["--config-file", config_file.to_str().unwrap()])
-                .args(&["--metrics-addr", &node.metrics_addr])
+            cmd.args(["run", "--bin", "neurod", "--"])
+                .args(["--config-file", config_file.to_str().unwrap()])
+                .args(["--metrics-addr", &node.metrics_addr])
                 .stdout(Stdio::from(log_file_handle.try_clone()?))
                 .stderr(Stdio::from(log_file_handle))
                 .kill_on_drop(true);
@@ -111,32 +108,35 @@ impl ClusterManager {
                 ))
             })?;
 
-            // Wait a bit to ensure it started
             sleep(Duration::from_secs(2)).await;
 
-            // Check if process is still running
-            if !self.is_process_running(pid).await {
+            if !Self::is_process_running(pid)? {
                 println!("{}", "✗ Failed".red());
                 return Err(ClusterError::NodeStartFailed(node.id));
             }
 
-            println!("{}", format!("✓ Started (PID: {})", pid).green());
+            println!("{}", format!("✓ Started (PID: {pid})").green());
 
             state.nodes.push(NodeState {
                 id: node.id,
                 pid,
-                raft_port: node.raft_addr.split(':').last().unwrap().parse().unwrap(),
+                raft_port: node
+                    .raft_addr
+                    .split(':')
+                    .next_back()
+                    .unwrap()
+                    .parse()
+                    .unwrap(),
                 metrics_port: node
                     .metrics_addr
                     .split(':')
-                    .last()
+                    .next_back()
                     .unwrap()
                     .parse()
                     .unwrap(),
             });
         }
 
-        // Save cluster state
         self.save_state(&state)?;
 
         println!("\n{}", "Cluster started successfully!".green().bold());
@@ -158,17 +158,16 @@ impl ClusterManager {
         println!("Stopping {} nodes...", state.nodes.len());
         for node in &state.nodes {
             print!("Stopping node {} (PID: {})... ", node.id, node.pid);
+            let pid = i32::try_from(node.pid)?;
 
-            // Try graceful shutdown first
             let _ = nix::sys::signal::kill(
-                nix::unistd::Pid::from_raw(node.pid as i32),
+                nix::unistd::Pid::from_raw(pid),
                 nix::sys::signal::Signal::SIGTERM,
             );
 
-            // Wait for graceful shutdown
             let mut stopped = false;
             for _ in 0..10 {
-                if !self.is_process_running(node.pid).await {
+                if !Self::is_process_running(node.pid)? {
                     stopped = true;
                     break;
                 }
@@ -176,9 +175,8 @@ impl ClusterManager {
             }
 
             if !stopped {
-                // Force kill
                 let _ = nix::sys::signal::kill(
-                    nix::unistd::Pid::from_raw(node.pid as i32),
+                    nix::unistd::Pid::from_raw(pid),
                     nix::sys::signal::Signal::SIGKILL,
                 );
             }
@@ -196,7 +194,7 @@ impl ClusterManager {
     pub async fn status(&self) -> Result<(), ClusterError> {
         println!("{}", "Checking cluster status...".yellow().bold());
 
-        if !self.is_running()? {
+        if !self.is_running() {
             println!("{}", "No cluster is running".yellow());
             return Ok(());
         }
@@ -207,10 +205,10 @@ impl ClusterManager {
 
         let mut running_count = 0;
         for node in &state.nodes {
-            let is_running = self.is_process_running(node.pid).await;
+            let is_running = Self::is_process_running(node.pid)?;
             if is_running {
                 running_count += 1;
-            };
+            }
 
             println!(
                 "  {} Node {} (PID: {}) - Raft: {}, Metrics: {}",
@@ -259,13 +257,13 @@ impl ClusterManager {
         follow: bool,
     ) -> Result<(), ClusterError> {
         let log_files = if let Some(id) = node_id {
-            vec![self.config.logs_dir().join(format!("node_{}.log", id))]
+            vec![self.config.logs_dir().join(format!("node_{id}.log"))]
         } else {
             // Get all log files
-            fs::read_dir(&self.config.logs_dir())?
-                .filter_map(|entry| entry.ok())
+            fs::read_dir(self.config.logs_dir())?
+                .filter_map(std::result::Result::ok)
                 .map(|entry| entry.path())
-                .filter(|path| path.extension().map_or(false, |ext| ext == "log"))
+                .filter(|path| path.extension().is_some_and(|ext| ext == "log"))
                 .collect()
         };
 
@@ -288,7 +286,7 @@ impl ClusterManager {
             for file in &log_files {
                 println!("\n{}", format!("=== {} ===", file.display()).blue().bold());
                 let content = fs::read_to_string(file)?;
-                println!("{}", content);
+                println!("{content}");
             }
         }
 
@@ -296,7 +294,7 @@ impl ClusterManager {
     }
 
     pub async fn test(&self) -> Result<(), ClusterError> {
-        if !self.is_running()? {
+        if !self.is_running() {
             return Err(ClusterError::NotRunning);
         }
 
@@ -304,16 +302,16 @@ impl ClusterManager {
 
         // Find a node to test against
         let test_port = state.nodes[0].raft_port;
-        let endpoint = format!("127.0.0.1:{}", test_port);
+        let endpoint = format!("127.0.0.1:{test_port}");
 
-        println!("Testing against endpoint: {}", endpoint);
+        println!("Testing against endpoint: {endpoint}");
 
         // Test PUT
         print!("Testing PUT operation... ");
         let put_result = Command::new("cargo")
-            .args(&["run", "--bin", "neuroctl", "--"])
-            .args(&["--endpoints", &endpoint])
-            .args(&["put", "test-key", "test-value"])
+            .args(["run", "--bin", "neuroctl", "--"])
+            .args(["--endpoints", &endpoint])
+            .args(["put", "test-key", "test-value"])
             .output()
             .await?;
 
@@ -328,9 +326,9 @@ impl ClusterManager {
         // Test GET
         print!("Testing GET operation... ");
         let get_result = Command::new("cargo")
-            .args(&["run", "--bin", "neuroctl", "--"])
-            .args(&["--endpoints", &endpoint])
-            .args(&["get", "test-key"])
+            .args(["run", "--bin", "neuroctl", "--"])
+            .args(["--endpoints", &endpoint])
+            .args(["get", "test-key"])
             .output()
             .await?;
 
@@ -346,9 +344,9 @@ impl ClusterManager {
         // Test DEL
         print!("Testing DEL operation... ");
         let del_result = Command::new("cargo")
-            .args(&["run", "--bin", "neuroctl", "--"])
-            .args(&["--endpoints", &endpoint])
-            .args(&["del", "test-key"])
+            .args(["run", "--bin", "neuroctl", "--"])
+            .args(["--endpoints", &endpoint])
+            .args(["del", "test-key"])
             .output()
             .await?;
 
@@ -365,7 +363,7 @@ impl ClusterManager {
 
     pub async fn clean(&self, clean_logs: bool) -> Result<(), ClusterError> {
         // Stop cluster if running
-        if self.is_running()? {
+        if self.is_running() {
             println!("Cluster is running, stopping it first...");
             self.stop().await?;
         }
@@ -378,7 +376,7 @@ impl ClusterManager {
 
         // Clean logs if requested
         if clean_logs && self.config.logs_dir().exists() {
-            fs::remove_dir_all(&self.config.logs_dir())?;
+            fs::remove_dir_all(self.config.logs_dir())?;
             println!("{}", "✓ Removed log files".green());
         }
 
@@ -386,9 +384,7 @@ impl ClusterManager {
         Ok(())
     }
 
-    // Helper methods
-    fn check_dependencies(&self) -> Result<(), ClusterError> {
-        // Check cargo
+    fn check_dependencies() -> Result<(), ClusterError> {
         if which::which("cargo").is_err() {
             return Err(ClusterError::DependencyNotFound("cargo".to_string()));
         }
@@ -396,12 +392,12 @@ impl ClusterManager {
         Ok(())
     }
 
-    fn is_running(&self) -> Result<bool, ClusterError> {
-        Ok(self.config.state_file().exists())
+    fn is_running(&self) -> bool {
+        self.config.state_file().exists()
     }
 
     fn load_state(&self) -> Result<ClusterState, ClusterError> {
-        if !self.is_running()? {
+        if !self.is_running() {
             return Err(ClusterError::NotRunning);
         }
 
@@ -415,10 +411,8 @@ impl ClusterManager {
         Ok(())
     }
 
-    async fn is_process_running(&self, pid: u32) -> bool {
-        match nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid as i32), None) {
-            Ok(_) => true,
-            Err(_) => false,
-        }
+    fn is_process_running(pid: u32) -> Result<bool, ClusterError> {
+        let pid = i32::try_from(pid)?;
+        Ok(nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid), None).is_ok())
     }
 }
