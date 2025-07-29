@@ -97,13 +97,14 @@ impl Config {
         (0..num_nodes)
             .map(|i| {
                 let id = (i + 1) as u64;
-                let raft_port = self.cluster.base_raft_port + i as u16;
-                let metrics_port = self.cluster.base_metrics_port + i as u16;
+                let i = u16::try_from(i).unwrap_or(0);
+                let raft_port = self.cluster.base_raft_port + i;
+                let metrics_port = self.cluster.base_metrics_port + i;
 
                 NodeConfig {
                     id,
-                    raft_addr: format!("127.0.0.1:{}", raft_port),
-                    metrics_addr: format!("0.0.0.0:{}", metrics_port),
+                    raft_addr: format!("127.0.0.1:{raft_port}"),
+                    metrics_addr: format!("0.0.0.0:{metrics_port}"),
                 }
             })
             .collect()
