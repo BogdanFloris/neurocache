@@ -5,6 +5,7 @@
 > Binaries  
 > • `neurod` – runs a Raft node + HTTP/3 edge server  
 > • `neuroctl` – client CLI for KV operations and cluster admin
+> • `neurotest` – test cluster management tool
 
 ---
 
@@ -15,7 +16,7 @@
 ├── raft/                # consensus + storage engine
 ├── neurod/              # daemon binary  
 ├── neuroctl/            # client CLI
-├── test_cluster/        # test configuration files (node_1.json, etc.)
+├── neurotest/           # test cluster management tool
 ├── Cargo.toml           # workspace root
 
 Not yet created:
@@ -75,21 +76,24 @@ This hybrid approach gives us:
 # build everything
 cargo build --workspace
 
-# run a node (Raft on :7000, HTTP/3 on :8080)
-cargo run --bin neurod -- --id 1 --config nodes.yaml
+# manage test clusters
+cargo run --bin neurotest -- start        # Start 3-node cluster
+cargo run --bin neurotest -- status       # Check cluster health
+cargo run --bin neurotest -- bench        # Run load tests
+cargo run --bin neurotest -- stop         # Stop cluster
 
 # client operations (Raft KV)
-cargo run --bin neuroctl -- --endpoints 127.0.0.1:7000 put alpha 123
-cargo run --bin neuroctl -- get alpha
+cargo run --bin neuroctl -- --endpoints 127.0.0.1:3001 put alpha 123
+cargo run --bin neuroctl -- --endpoints 127.0.0.1:3001 get alpha
 
-# edge operations (HTTP/3 CDN)
+# edge operations (HTTP/3 CDN) - NOT YET IMPLEMENTED
 curl http://localhost:8080/cache/my-asset.js
 curl -X PUT http://localhost:8080/cache/my-asset.js --data-binary @file.js
 
 # tests and lints
 cargo test --workspace
 cargo clippy --workspace -- -D warnings
-zig test zig/slab.zig
+# zig test zig/slab.zig  # NOT YET IMPLEMENTED
 ```
 
 ## 3. Current Implementation Status
@@ -97,8 +101,9 @@ zig test zig/slab.zig
 ### Completed
 
 #### Core Infrastructure
-- **neurod daemon**: Runs Raft node (port 7000), HTTP/3 edge server not yet implemented
+- **neurod daemon**: Runs Raft node (port 3001-3003), HTTP/3 edge server not yet implemented
 - **neuroctl CLI**: Full get/put/del commands with endpoint support
+- **neurotest CLI**: Rust-based test cluster management replacing bash scripts
 - **In-memory KvStore**: HashMap-based state machine with proper StateMachine trait implementation
 - **JSON Frame codec**: Length-delimited (4-byte BE header) + JSON serialization
 - **Error handling**: NotFound, InvalidKey, proper error propagation
@@ -137,10 +142,144 @@ zig test zig/slab.zig
 - Peer-to-peer cache sharing
 - Cache metadata in Raft
 
-## 4. Open questions
+## 4. Architecture Deep Dive
 
-- TLS handshake details
-- When to switch from TCP to QUIC
+### What NeuroCache Actually Is
+
+NeuroCache is a **distributed caching CDN** that uses machine learning to predict and pre-fetch content. Think of it as a self-hosted Cloudflare with AI-powered cache warming. The system has two distinct layers:
+
+1. **Control Plane (Raft)**: Manages metadata about what's cached where
+2. **Data Plane (Edge Servers)**: Serves actual content from local memory
+
+### How Components Interact
+
+```
+Client Request → Edge Server (HTTP/3)
+                      ↓
+                 Local Slab (HIT) → Serve immediately (~2ms)
+                      ↓
+                 Local Slab (MISS) → Check Raft metadata
+                                          ↓
+                                    Found on peer? → Fetch & cache
+                                          ↓
+                                    Not cached? → Fetch from origin
+                                          ↓
+                                    Update Raft → All nodes know about it
+                                          ↓
+                                    ML Engine → Predicts next requests
+                                          ↓
+                                    PPO Agent → Optimizes cache strategy
+```
+
+### What Raft Stores (Metadata Only!)
+
+Raft does NOT store file content. It only stores:
+
+```rust
+struct CacheEntry {
+    key: String,              // "/assets/app.js"
+    content_hash: [u8; 32],   // SHA256 for validation
+    size: u64,                // 145KB
+    nodes: Vec<NodeId>,       // Which nodes have it cached
+    expires_at: Timestamp,    // From Cache-Control headers
+    access_count: u64,        // Popularity tracking
+}
+
+struct AccessPattern {
+    client_id: String,        // Hashed IP
+    sequence: Vec<String>,    // ["/index.html", "/app.js", "/app.css"]
+    timestamp: Timestamp,
+}
+```
+
+### Cache Decision Logic
+
+When content is found on another node:
+- **< 50MB**: Fetch and cache locally (reduce future latency)
+- **> 100MB**: Redirect client to that node (save bandwidth)
+- **ML says popular**: Always cache locally
+- **Cold content**: Proxy without caching
+
+### End-to-End Example: Cache Hit
+
+1. Client requests `https://cdn.example.com/static/app.js`
+2. Edge server checks local Zig slab (memory-mapped file)
+3. Found! Serve directly from memory (~2-3ms total)
+4. Async: Log access pattern to Raft for ML training
+5. ML predicts client will want `/static/app.css` next
+6. Pre-fetch app.css in background
+
+### End-to-End Example: Cache Miss
+
+1. Client requests new file `/images/hero.jpg`
+2. Local slab doesn't have it
+3. Query Raft: "Who has /images/hero.jpg?"
+4. Raft says: "Node 1 has it, 245KB, accessed 1523 times"
+5. Fetch from Node 1 over internal network (~10ms)
+6. Store in local slab for next time
+7. Update Raft: "Node 2 also has it now"
+8. ML learns this access pattern
+9. PPO agent adjusts caching thresholds
+
+### Why This Architecture?
+
+- **Performance**: Cache hits never touch Raft (just memory reads)
+- **Consistency**: All nodes agree on what's cached where
+- **Intelligence**: ML predicts what to cache before it's requested
+- **Flexibility**: Can cache at edge while maintaining consistency
+
+## 5. Development Roadmap
+
+### Phase 1: Complete Raft (Current)
+- [ ] Leader election (RequestVote RPC)
+- [ ] Log replication with proper indices
+- [ ] Safety properties (term checks, etc.)
+- [ ] Basic persistence
+
+### Phase 2: Zig Slab Storage
+- [ ] Memory-mapped arena allocator
+- [ ] FFI bindings to Rust
+- [ ] Zero-copy reads
+- [ ] Benchmarks vs. standard allocators
+
+### Phase 3: HTTP/3 Edge Server  
+- [ ] Quinn for QUIC transport
+- [ ] Cache-Control header parsing
+- [ ] Origin fetch with timeout/retry
+- [ ] Peer-to-peer cache protocol
+
+### Phase 4: ML Integration
+- [ ] ONNX runtime for GPT-2 inference
+- [ ] Access pattern collection
+- [ ] Next-request prediction
+- [ ] Pre-fetch queue
+
+### Phase 5: Reinforcement Learning
+- [ ] PPO implementation with burn-rs
+- [ ] Reward: hit rate + latency reduction
+- [ ] Actions: pre-fetch, evict, cache duration
+- [ ] Online learning from real traffic
+
+## 6. Testing
+
+Use `neurotest` for all cluster testing:
+
+```bash
+# Quick test
+cargo run --bin neurotest -- start
+cargo run --bin neurotest -- test
+cargo run --bin neurotest -- bench --duration 60
+cargo run --bin neurotest -- stop
+
+# Monitor performance
+cargo run --bin neurotest -- monitor start
+# Visit http://localhost:3000 for Grafana dashboards
+```
+
+## 7. Open Questions
+
+- TLS handshake details for peer connections
+- When to switch from TCP to QUIC for Raft
 - Snapshot compression (zstd or raw mmap?)
-- Should we add metrics collection before Raft implementation?
-- Right now, reads also go through the log. Think about improving processing speed by confirming leadership without going through the log (we need to confirm leadership to make sure we don't serve stale reads). This should be done by splitting read requests from write requests, adding read requests to a pending read requests queue, and sending a heartbeat to confirm leadership. If leadership is confirmed we can process read requests from the queue. (This is the ReadIndex approach used by etcd)
+- Should we add metrics collection before completing Raft?
+- Read optimization: Implement ReadIndex to avoid log for read operations

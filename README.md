@@ -30,16 +30,41 @@
 # Build everything
 cargo build --workspace
 
-# Run a node
-cargo run --bin neurod -- -c test_cluster/node_1.json
+# Start a test cluster (easiest way)
+cargo run --bin neurotest -- start
 
 # Client operations
-cargo run --bin neuroctl -- --endpoints 127.0.0.1:7001 put alpha 123
-cargo run --bin neuroctl -- get alpha
+cargo run --bin neuroctl -- --endpoints 127.0.0.1:3001 put mykey myvalue
+cargo run --bin neuroctl -- --endpoints 127.0.0.1:3001 get mykey
 
-# Tests
-cargo test --workspace
-cargo clippy --workspace -- -D warnings
+# Run benchmarks
+cargo run --bin neurotest -- bench
+
+# Stop cluster
+cargo run --bin neurotest -- stop
 ```
 
-See `CLAUDE.md` for detailed project documentation and development roadmap.
+## Project Status
+
+🚧 **Early Development** - Currently implementing core Raft consensus. Not production ready.
+
+### What Works Now
+- Basic Raft networking and heartbeats
+- Key-value operations (no consensus yet)
+- Test cluster management
+- Metrics and monitoring
+
+### Coming Next
+- Raft leader election and log replication
+- Zig slab allocator for zero-copy storage
+- HTTP/3 edge server for CDN functionality
+- ML-powered cache prediction
+
+## Documentation
+
+- [`CLAUDE.md`](CLAUDE.md) - Detailed architecture and development roadmap
+- [`neurotest/README.md`](neurotest/README.md) - Test cluster management guide
+
+## License
+
+Apache License 2.0 - see [LICENSE](LICENSE) for details.
