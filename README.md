@@ -22,6 +22,7 @@
 
 - `neurod` - Raft node + HTTP/3 edge server
 - `neuroctl` - CLI client for KV operations and cluster admin
+- `neurotest` - Test cluster management tool (see [`neurotest/README.md`](neurotest/README.md))
 
 ## Quick Start
 
